@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Yönetici Paneli - ARTAMEDO</title>
+  <link rel="stylesheet" href="admin.css">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <!-- Lucide Icons - Modern flat line icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <!-- Tam Ekran Butonu -->
+  <button id="fullscreen-btn" class="fullscreen-btn" title="Tam Ekran">
+    <i data-lucide="maximize" class="fullscreen-icon"></i>
+  </button>
+
+  <div class="admin-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="logo">
+        <i data-lucide="zap" class="logo-icon-svg"></i>
+        <h1>ARTAMEDO Admin</h1>
+      </div>
+      
+      <nav class="nav-menu">
+        <a href="#" class="nav-item active" data-section="questions">
+          <i data-lucide="file-text" class="nav-icon-svg"></i>
+          Sorular
+        </a>
+        <a href="#" class="nav-item" data-section="add-question">
+          <i data-lucide="plus-circle" class="nav-icon-svg"></i>
+          Soru Ekle
+        </a>
+        <a href="#" class="nav-item" data-section="qr-codes">
+          <i data-lucide="qr-code" class="nav-icon-svg"></i>
+          QR Kodları
+        </a>
+        <a href="#" class="nav-item" data-section="import-export">
+          <i data-lucide="folder-sync" class="nav-icon-svg"></i>
+          İçe/Dışa Aktar
+        </a>
+        <a href="#" class="nav-item" data-section="settings">
+          <i data-lucide="sliders" class="nav-icon-svg"></i>
+          Ayarlar
+        </a>
+        <a href="/" class="nav-item">
+          <i data-lucide="gamepad-2" class="nav-icon-svg"></i>
+          Oyuna Git
+        </a>
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Questions Section -->
+      <section id="questions-section" class="section active">
+        <div class="section-header">
+          <h2>Sorular</h2>
+        </div>
+        
+        <!-- Soru İstatistikleri -->
+        <div id="question-stats" class="question-stats">
+          <!-- Dinamik olarak eklenecek -->
+        </div>
+        
+        <div id="questions-list" class="questions-list">
+          <!-- Dinamik olarak eklenecek -->
+        </div>
+      </section>
+
+      <!-- Add Question Section -->
+      <section id="add-question-section" class="section">
+        <div class="section-header">
+          <h2 id="form-title">Yeni Soru Ekle</h2>
+        </div>
+        
+        <form id="question-form" class="question-form">
+          <input type="hidden" id="question-id">
+          
+          <div class="form-group">
+            <label>Soru Tipi</label>
+            <div class="type-selector">
+              <button type="button" class="type-btn active" data-type="multiple">
+                <i data-lucide="list" class="type-icon-svg"></i>
+                Çoktan Seçmeli
+              </button>
+              <button type="button" class="type-btn" data-type="truefalse">
+                <i data-lucide="scale" class="type-icon-svg"></i>
+                Doğru/Yanlış
+              </button>
+              <button type="button" class="type-btn" data-type="fillblank">
+                <i data-lucide="pencil" class="type-icon-svg"></i>
+                Boşluk Doldurma
+              </button>
+              <button type="button" class="type-btn" data-type="duel">
+                <i data-lucide="swords" class="type-icon-svg"></i>
+                Kapışma 2'li
+              </button>
+              <button type="button" class="type-btn" data-type="battle">
+                <i data-lucide="users" class="type-icon-svg"></i>
+                Kapışma Birlikte
+              </button>
+              <button type="button" class="type-btn" data-type="matching">
+                <i data-lucide="puzzle" class="type-icon-svg"></i>
+                Eşleme
+              </button>
+              <button type="button" class="type-btn" data-type="drag_drop">
+                <i data-lucide="move" class="type-icon-svg"></i>
+                Sürükle Bırak
+              </button>
+              <button type="button" class="type-btn" data-type="application">
+                <i data-lucide="flask-conical" class="type-icon-svg"></i>
+                Uygulama
+              </button>
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label>QR Kod İçeriği</label>
+              <input type="text" id="qr-code" placeholder="Örn: 1, 2, 3, A1, B2..." required>
+              <small>Bu değer QR koda yazdırılacak ve taratıldığında bu soru gösterilecek</small>
+            </div>
+            
+            <div class="form-group">
+              <label>Adım Sayısı</label>
+              <div class="step-inputs">
+                <div class="step-input-group">
+                  <label>Doğru Cevap</label>
+                  <input type="number" id="correct-steps" value="3" min="1" max="20" required>
+                  <small>+ adım</small>
+                </div>
+                <div class="step-input-group">
+                  <label>Yanlış Cevap</label>
+                  <input type="number" id="wrong-steps" value="1" min="0" max="10" required>
+                  <small>- adım</small>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label>Süre Sınırı (Saniye)</label>
+              <div class="time-input-container">
+                <input type="number" id="time-limit" value="0" min="0" max="300" placeholder="0">
+                <small>0 = Süre sınırı yok</small>
+              </div>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label>Soru Metni</label>
+            <textarea id="question-text" rows="3" placeholder="Sorunuzu yazın..." required></textarea>
+            <small class="fillblank-hint hidden">Boşluk için ___ (3 alt çizgi) kullanın. Örn: Elektrik akımının birimi ___ dir.</small>
+          </div>
+          
+          <div class="form-group">
+            <label>Görsel (Opsiyonel)</label>
+            <div class="image-upload-container">
+              <input type="file" id="image-file" accept="image/*" class="hidden">
+              <button type="button" id="upload-image-btn" class="btn-upload">
+                <i data-lucide="image-plus" class="btn-icon-svg"></i> Görsel Yükle
+              </button>
+              <div id="image-preview" class="image-preview hidden">
+                <img id="preview-img" src="" alt="Önizleme">
+                <button type="button" id="remove-image-btn" class="btn-remove-image">✕</button>
+              </div>
+            </div>
+            <input type="hidden" id="image-data">
+          </div>
+          
+          <!-- Multiple Choice Options -->
+          <div id="multiple-options" class="form-group">
+            <label>Şıklar</label>
+            <div class="options-container">
+              <div class="option-input">
+                <span class="option-letter">A</span>
+                <input type="text" id="option-a" placeholder="A şıkkı">
+                <input type="radio" name="correct" value="A" checked>
+                <span class="radio-label">Doğru</span>
+              </div>
+              <div class="option-input">
+                <span class="option-letter">B</span>
+                <input type="text" id="option-b" placeholder="B şıkkı">
+                <input type="radio" name="correct" value="B">
+                <span class="radio-label">Doğru</span>
+              </div>
+              <div class="option-input">
+                <span class="option-letter">C</span>
+                <input type="text" id="option-c" placeholder="C şıkkı">
+                <input type="radio" name="correct" value="C">
+                <span class="radio-label">Doğru</span>
+              </div>
+              <div class="option-input">
+                <span class="option-letter">D</span>
+                <input type="text" id="option-d" placeholder="D şıkkı">
+                <input type="radio" name="correct" value="D">
+                <span class="radio-label">Doğru</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- True/False Options -->
+          <div id="truefalse-options" class="form-group hidden">
+            <label>Doğru Cevap</label>
+            <div class="tf-selector">
+              <button type="button" class="tf-option active" data-value="true">
+                <i data-lucide="check" class="btn-icon-svg"></i> Doğru
+              </button>
+              <button type="button" class="tf-option" data-value="false">
+                <i data-lucide="x" class="btn-icon-svg"></i> Yanlış
+              </button>
+            </div>
+          </div>
+          
+          <!-- Fill Blank Options -->
+          <div id="fillblank-options" class="form-group hidden">
+            <label>Boşluk Cevapları (Sırayla)</label>
+            <div id="blank-answers" class="blank-answers">
+              <div class="blank-input">
+                <span>1. Boşluk:</span>
+                <input type="text" class="blank-answer" placeholder="Doğru cevap">
+              </div>
+            </div>
+            <button type="button" id="add-blank" class="btn-small">+ Boşluk Ekle</button>
+            
+            <label style="margin-top: 20px;">Karıştırıcı Seçenekler (Sürükle-bırak için)</label>
+            <div id="distractor-options" class="distractor-options">
+              <input type="text" class="distractor" placeholder="Yanlış seçenek 1">
+              <input type="text" class="distractor" placeholder="Yanlış seçenek 2">
+            </div>
+            <button type="button" id="add-distractor" class="btn-small">+ Seçenek Ekle</button>
+          </div>
+          
+          <!-- Duel Options (Kapışma 2'li) - Çoktan seçmeli gibi -->
+          <div id="duel-options" class="form-group hidden">
+            <div class="duel-info">
+              <i data-lucide="info" class="info-icon"></i>
+              <p>Bu soru 2 oyuncu arasında kapışma modunda sorulacak. İlk doğru cevaplayan puan kazanır.</p>
+            </div>
+            <label>Şıklar</label>
+            <div class="options-container">
+              <div class="option-input">
+                <span class="option-letter">A</span>
+                <input type="text" id="duel-option-a" placeholder="A şıkkı">
+                <input type="radio" name="duel-correct" value="A" checked>
+                <span class="radio-label">Doğru</span>
+              </div>
+              <div class="option-input">
+                <span class="option-letter">B</span>
+                <input type="text" id="duel-option-b" placeholder="B şıkkı">
+                <input type="radio" name="duel-correct" value="B">
+                <span class="radio-label">Doğru</span>
+              </div>
+              <div class="option-input">
+                <span class="option-letter">C</span>
+                <input type="text" id="duel-option-c" placeholder="C şıkkı">
+                <input type="radio" name="duel-correct" value="C">
+                <span class="radio-label">Doğru</span>
+              </div>
+              <div class="option-input">
+                <span class="option-letter">D</span>
+                <input type="text" id="duel-option-d" placeholder="D şıkkı">
+                <input type="radio" name="duel-correct" value="D">
+                <span class="radio-label">Doğru</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Group Duel Options (Kapışma Birlikte) - Çoktan seçmeli gibi -->
+          <div id="group-duel-options" class="form-group hidden">
+            <div class="duel-info group">
+              <i data-lucide="users" class="info-icon"></i>
+              <p>Bu soru tüm oyunculara aynı anda sorulacak. Herkese aynı süre verilir.</p>
+            </div>
+            <label>Şıklar</label>
+            <div class="options-container">
+              <div class="option-input">
+                <span class="option-letter">A</span>
+                <input type="text" id="group-option-a" placeholder="A şıkkı">
+                <input type="radio" name="group-correct" value="A" checked>
+                <span class="radio-label">Doğru</span>
+              </div>
+              <div class="option-input">
+                <span class="option-letter">B</span>
+                <input type="text" id="group-option-b" placeholder="B şıkkı">
+                <input type="radio" name="group-correct" value="B">
+                <span class="radio-label">Doğru</span>
+              </div>
+              <div class="option-input">
+                <span class="option-letter">C</span>
+                <input type="text" id="group-option-c" placeholder="C şıkkı">
+                <input type="radio" name="group-correct" value="C">
+                <span class="radio-label">Doğru</span>
+              </div>
+              <div class="option-input">
+                <span class="option-letter">D</span>
+                <input type="text" id="group-option-d" placeholder="D şıkkı">
+                <input type="radio" name="group-correct" value="D">
+                <span class="radio-label">Doğru</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Matching Options (Eşleme) -->
+          <div id="matching-options" class="form-group hidden">
+            <div class="matching-info">
+              <i data-lucide="puzzle" class="info-icon"></i>
+              <p>Sol taraftaki öğeleri sağ taraftaki eşleriyle eşleştirin.</p>
+            </div>
+            <label>Eşleştirme Çiftleri</label>
+            <div id="matching-pairs" class="matching-pairs">
+              <div class="matching-pair">
+                <input type="text" class="match-left" placeholder="Sol öğe 1">
+                <span class="match-arrow">↔</span>
+                <input type="text" class="match-right" placeholder="Sağ eşi 1">
+                <button type="button" class="btn-remove-pair">✕</button>
+              </div>
+              <div class="matching-pair">
+                <input type="text" class="match-left" placeholder="Sol öğe 2">
+                <span class="match-arrow">↔</span>
+                <input type="text" class="match-right" placeholder="Sağ eşi 2">
+                <button type="button" class="btn-remove-pair">✕</button>
+              </div>
+              <div class="matching-pair">
+                <input type="text" class="match-left" placeholder="Sol öğe 3">
+                <span class="match-arrow">↔</span>
+                <input type="text" class="match-right" placeholder="Sağ eşi 3">
+                <button type="button" class="btn-remove-pair">✕</button>
+              </div>
+            </div>
+            <button type="button" id="add-matching-pair" class="btn-small">+ Çift Ekle</button>
+          </div>
+          
+          <!-- Drag Drop Options (Sürükle Bırak) -->
+          <div id="drag-drop-options" class="form-group hidden">
+            <div class="drag-drop-info">
+              <i data-lucide="move" class="info-icon"></i>
+              <p>Öğeleri doğru sıraya veya kategoriye sürükleyip bırakın.</p>
+            </div>
+            <label>Sıralama Türü</label>
+            <div class="drag-type-selector">
+              <button type="button" class="drag-type-btn active" data-drag-type="order">Sıralama</button>
+              <button type="button" class="drag-type-btn" data-drag-type="category">Kategorileme</button>
+            </div>
+            
+            <div id="drag-order-options">
+              <label>Doğru Sırayla Öğeler</label>
+              <div id="drag-items" class="drag-items">
+                <div class="drag-item-input">
+                  <span class="drag-order">1.</span>
+                  <input type="text" class="drag-item" placeholder="1. sıradaki öğe">
+                  <button type="button" class="btn-remove-drag">✕</button>
+                </div>
+                <div class="drag-item-input">
+                  <span class="drag-order">2.</span>
+                  <input type="text" class="drag-item" placeholder="2. sıradaki öğe">
+                  <button type="button" class="btn-remove-drag">✕</button>
+                </div>
+                <div class="drag-item-input">
+                  <span class="drag-order">3.</span>
+                  <input type="text" class="drag-item" placeholder="3. sıradaki öğe">
+                  <button type="button" class="btn-remove-drag">✕</button>
+                </div>
+              </div>
+              <button type="button" id="add-drag-item" class="btn-small">+ Öğe Ekle</button>
+            </div>
+            
+            <div id="drag-category-options" class="hidden">
+              <label>Kategoriler</label>
+              <div id="drag-categories" class="drag-categories">
+                <div class="category-group">
+                  <input type="text" class="category-name" placeholder="Kategori 1 Adı">
+                  <div class="category-items">
+                    <input type="text" class="category-item" placeholder="Öğe 1">
+                    <input type="text" class="category-item" placeholder="Öğe 2">
+                  </div>
+                  <button type="button" class="btn-add-category-item btn-small">+ Öğe</button>
+                </div>
+                <div class="category-group">
+                  <input type="text" class="category-name" placeholder="Kategori 2 Adı">
+                  <div class="category-items">
+                    <input type="text" class="category-item" placeholder="Öğe 1">
+                    <input type="text" class="category-item" placeholder="Öğe 2">
+                  </div>
+                  <button type="button" class="btn-add-category-item btn-small">+ Öğe</button>
+                </div>
+              </div>
+              <button type="button" id="add-category" class="btn-small">+ Kategori Ekle</button>
+            </div>
+          </div>
+          
+          <!-- Application Options (Uygulama) -->
+          <div id="application-options" class="form-group hidden">
+            <div class="application-info">
+              <i data-lucide="flask-conical" class="info-icon"></i>
+              <p>Yarışmacı gerçek hayatta bir uygulama yapacak. Süre bitiminde doğru/yanlış kontrolü yapılacak.</p>
+            </div>
+            
+            <label>Uygulama Açıklaması</label>
+            <textarea id="application-instructions" rows="3" placeholder="Yarışmacının yapması gereken uygulamayı detaylı açıklayın...">Parçaları kullanarak devreyi oluştur.</textarea>
+            
+            <label>Kontrol Görseli (Doğru Uygulama)</label>
+            <div class="image-upload-container">
+              <input type="file" id="application-image-file" accept="image/*" class="hidden">
+              <button type="button" id="upload-application-image-btn" class="btn-upload">
+                <i data-lucide="image-plus" class="btn-icon-svg"></i> Kontrol Görseli Yükle
+              </button>
+              <div id="application-image-preview" class="image-preview hidden">
+                <img id="application-preview-img" src="" alt="Kontrol Görseli">
+                <button type="button" id="remove-application-image-btn" class="btn-remove-image">✕</button>
+              </div>
+            </div>
+            <input type="hidden" id="application-image-data">
+            
+            <label>Kontrol Açıklaması</label>
+            <textarea id="application-check-text" rows="2" placeholder="Doğru uygulamanın nasıl görünmesi gerektiğini açıklayın..."></textarea>
+          </div>
+          
+          <!-- Bilgi Bölümü (Tüm soru tipleri için opsiyonel) -->
+          <div class="form-group info-section">
+            <div class="info-toggle">
+              <label class="toggle-label">
+                <input type="checkbox" id="info-enabled">
+                <span class="toggle-switch"></span>
+                <span>Bilgi Bölümü Ekle</span>
+              </label>
+              <small>Soru cevaplandıktan sonra gösterilecek ek bilgi</small>
+            </div>
+            <div id="info-content" class="info-content hidden">
+              <label>Bilgi Başlığı (Opsiyonel)</label>
+              <input type="text" id="info-title" placeholder="Örn: Biliyor muydunuz?">
+              
+              <label>Bilgi İçeriği</label>
+              <textarea id="info-text" rows="4" placeholder="Soruyla ilgili ek bilgi, açıklama veya ilginç faktörler..."></textarea>
+              
+              <label>Bilgi Resmi (Opsiyonel)</label>
+              <div class="info-image-upload">
+                <input type="text" id="info-image-url" placeholder="Resim URL'si girin veya dosya yükleyin">
+                <label class="image-upload-btn" for="info-image-file">
+                  <i data-lucide="upload"></i>
+                  Yükle
+                </label>
+                <input type="file" id="info-image-file" accept="image/*" hidden>
+              </div>
+              <div id="info-image-preview" class="info-image-preview hidden">
+                <img id="info-preview-img" src="" alt="Önizleme">
+                <button type="button" id="remove-info-image" class="remove-image-btn">&times;</button>
+              </div>
+              
+              <!-- AR Animasyon Bölümü -->
+              <div class="ar-section">
+                <label>
+                  <i data-lucide="box" class="ar-icon"></i>
+                  AR Animasyonu (Opsiyonel)
+                </label>
+                <small>Artırılmış gerçeklik ile 3D animasyon göstermek için model ekleyin</small>
+                
+                <!-- AR Marker Seçimi -->
+                <div class="ar-marker-section">
+                  <label>AR Marker Tipi</label>
+                  <small>Hiro marker varsayılandır. Özel marker için <b>.patt dosyası</b> gerekir.</small>
+                  <div class="ar-marker-options">
+                    <label class="marker-option">
+                      <input type="radio" name="ar-marker-type" value="hiro" checked>
+                      <span>Hiro Marker (Varsayılan)</span>
+                    </label>
+                    <label class="marker-option">
+                      <input type="radio" name="ar-marker-type" value="custom">
+                      <span>Özel Marker (.patt)</span>
+                    </label>
+                  </div>
+                  <div id="custom-marker-upload" class="custom-marker-upload hidden">
+                    <div class="marker-upload-row">
+                      <input type="text" id="ar-marker-url" placeholder="Pattern dosyası URL (.patt)" readonly>
+                      <label class="image-upload-btn" for="ar-marker-file">
+                        <i data-lucide="upload"></i>
+                        .patt Yükle
+                      </label>
+                      <input type="file" id="ar-marker-file" accept=".patt" hidden>
+                    </div>
+                    <div id="ar-marker-preview" class="ar-marker-preview hidden">
+                      <img id="ar-marker-preview-img" src="" alt="Marker Önizleme">
+                      <button type="button" id="remove-ar-marker" class="remove-image-btn">&times;</button>
+                    </div>
+                    <div class="marker-help">
+                      <p style="font-size: 0.85rem; color: #aaa; margin-bottom: 8px;">
+                        📌 Özel marker oluşturmak için:
+                      </p>
+                      <ol style="font-size: 0.8rem; color: #888; margin-left: 20px; margin-bottom: 10px;">
+                        <li>Aşağıdaki linke tıklayın</li>
+                        <li>Resminizi yükleyin</li>
+                        <li>"Download Marker" butonuna tıklayın</li>
+                        <li>İndirilen .patt dosyasını buraya yükleyin</li>
+                        <li>İndirilen resmi yazdırıp marker olarak kullanın</li>
+                      </ol>
+                      <a href="https://ar-js-org.github.io/AR.js/three.js/examples/marker-training/examples/generator.html" target="_blank">
+                        <i data-lucide="external-link"></i>
+                        Marker Oluşturma Aracı
+                      </a>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="ar-model-selector">
+                  <label>Animasyon Tipi</label>
+                  <select id="ar-animation-type">
+                    <option value="">AR Animasyonu Yok</option>
+                    <option value="circuit">Elektrik Devresi Animasyonu</option>
+                    <option value="bulb">Ampul Yanıp Sönme</option>
+                    <option value="current">Akım Akışı</option>
+                    <option value="resistance">Direnç Gösterimi</option>
+                    <option value="voltage">Voltaj Animasyonu</option>
+                    <option value="custom">Özel 3D Model (.glb/.gltf)</option>
+                    <option value="custom-aframe">Özel A-Frame Kodu</option>
+                  </select>
+                </div>
+                
+                <div id="custom-ar-model" class="custom-ar-model hidden">
+                  <label>Model Başlığı</label>
+                  <input type="text" id="ar-model-title" placeholder="Örn: Ampul Modeli">
+                  
+                  <label>Model Açıklaması</label>
+                  <input type="text" id="ar-model-description" placeholder="Örn: Elektrik ampulünün 3D görünümü">
+                  
+                  <label>3D Model Dosyası (.glb/.gltf)</label>
+                  <div class="model-upload-area">
+                    <input type="file" id="ar-model-file" accept=".glb,.gltf" style="display: none;">
+                    <button type="button" class="btn-upload-model" onclick="document.getElementById('ar-model-file').click()">
+                      <i data-lucide="upload"></i> Model Dosyası Yükle
+                    </button>
+                    <span id="model-filename" class="model-filename"></span>
+                  </div>
+                  <div class="model-url-divider">veya URL ile</div>
+                  <input type="text" id="ar-model-url" placeholder="https://example.com/model.glb">
+                  <small>Ücretsiz modeller: <a href="https://sketchfab.com" target="_blank">Sketchfab</a>, <a href="https://poly.pizza" target="_blank">Poly Pizza</a></small>
+                </div>
+                
+                <div id="custom-aframe-code" class="custom-aframe-code hidden">
+                  <label>A-Frame HTML Kodu</label>
+                  <textarea id="ar-aframe-code" rows="10" placeholder="<!-- A-Frame entity kodunuzu buraya yazın -->
+<a-box position='0 0.5 0' color='#4CC3D9'
+  animation='property: rotation; to: 0 360 0; dur: 2000; loop: true'>
+</a-box>"></textarea>
+                  <div class="aframe-help">
+                    <p><strong>Animasyon Oluşturma Rehberi:</strong></p>
+                    <ul>
+                      <li><code>&lt;a-box&gt;</code> - Kutu</li>
+                      <li><code>&lt;a-sphere&gt;</code> - Küre</li>
+                      <li><code>&lt;a-cylinder&gt;</code> - Silindir</li>
+                      <li><code>&lt;a-cone&gt;</code> - Koni</li>
+                      <li><code>&lt;a-torus&gt;</code> - Halka</li>
+                    </ul>
+                    <p><strong>Animasyon özelliği:</strong></p>
+                    <code>animation="property: rotation; to: 0 360 0; dur: 2000; loop: true"</code>
+                    <a href="/ar-tutorial.html" target="_blank" class="tutorial-link">
+                      <i data-lucide="book-open"></i>
+                      Detaylı Animasyon Rehberi
+                    </a>
+                  </div>
+                </div>
+                
+                <div id="ar-preview" class="ar-preview hidden">
+                  <button type="button" id="ar-preview-btn" class="ar-preview-btn">
+                    <i data-lucide="smartphone"></i>
+                    <span>AR Önizleme</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="form-actions">
+            <button type="submit" class="btn-primary">
+              <span id="submit-btn-text">Soru Ekle</span>
+            </button>
+            <button type="button" id="cancel-edit" class="btn-secondary hidden">İptal</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- QR Codes Section -->
+      <section id="qr-codes-section" class="section">
+        <div class="section-header">
+          <h2>QR Kodları</h2>
+          <p>Soruların QR kodlarını özelleştirin ve indirin</p>
+        </div>
+        
+        <div class="qr-settings-card">
+          <h3>QR Kod Ayarları</h3>
+          <div class="qr-settings-row">
+            <div class="qr-setting">
+              <label>QR Rengi</label>
+              <input type="color" id="qr-color" value="#000000">
+            </div>
+            <div class="qr-setting">
+              <label>Arka Plan</label>
+              <input type="color" id="qr-bg-color" value="#ffffff">
+            </div>
+            <div class="qr-setting">
+              <label>Logo/Resim</label>
+              <input type="file" id="qr-logo" accept="image/*" class="hidden">
+              <button type="button" id="upload-qr-logo-btn" class="btn-small"><i data-lucide="image" class="btn-icon-svg"></i> Logo Ekle</button>
+              <button type="button" id="remove-qr-logo-btn" class="btn-small hidden">✕ Kaldır</button>
+            </div>
+            <div class="qr-setting">
+              <label>Logo Boyutu</label>
+              <select id="qr-logo-size">
+                <option value="15">Küçük (%15)</option>
+                <option value="20">Orta-Küçük (%20)</option>
+                <option value="25" selected>Orta (%25)</option>
+                <option value="30">Orta-Büyük (%30)</option>
+                <option value="35">Büyük (%35)</option>
+              </select>
+            </div>
+            <div class="qr-setting">
+              <label>QR Boyutu</label>
+              <select id="qr-size">
+                <option value="200">Küçük (200px)</option>
+                <option value="300" selected>Orta (300px)</option>
+                <option value="400">Büyük (400px)</option>
+                <option value="500">Çok Büyük (500px)</option>
+              </select>
+            </div>
+          </div>
+          <div class="qr-logo-preview hidden" id="qr-logo-preview">
+            <img id="qr-logo-img" src="" alt="Logo">
+          </div>
+          <div class="qr-actions">
+            <button id="refresh-qr-btn" class="btn-primary">🔄 QR Kodları Güncelle</button>
+            <button id="download-all-qr-btn" class="btn-primary"><i data-lucide="download" class="btn-icon-svg"></i> Tümünü İndir (ZIP)</button>
+            <button id="download-pdf-btn" class="btn-primary"><i data-lucide="file-text" class="btn-icon-svg"></i> PDF İndir (A4 - 65mm)</button>
+          </div>
+        </div>
+        
+        <div id="qr-list" class="qr-list">
+          <!-- Dinamik olarak eklenecek -->
+        </div>
+      </section>
+
+      <!-- Import/Export Section -->
+      <section id="import-export-section" class="section">
+        <div class="section-header">
+          <h2>Veri Yönetimi</h2>
+          <p>Soruları ve görselleri içe/dışa aktarın</p>
+        </div>
+        
+        <div class="import-export-container">
+          <div class="export-card">
+            <div class="card-icon"><i data-lucide="upload" class="card-icon-svg"></i></div>
+            <h3>Dışa Aktar</h3>
+            <p>Tüm soruları ve görselleri JSON dosyası olarak indirin</p>
+            <button id="export-btn" class="btn-primary">Verileri İndir</button>
+          </div>
+          
+          <div class="import-card">
+            <div class="card-icon"><i data-lucide="download" class="card-icon-svg"></i></div>
+            <h3>İçe Aktar</h3>
+            <p>Daha önce dışa aktarılmış JSON dosyasını yükleyin</p>
+            <input type="file" id="import-file" accept=".json" class="hidden">
+            <button id="import-btn" class="btn-primary">Dosya Seç</button>
+            <div id="import-status" class="import-status hidden"></div>
+          </div>
+          
+          <div class="migrate-card">
+            <div class="card-icon"><i data-lucide="image" class="card-icon-svg"></i></div>
+            <h3>Resimleri Taşı</h3>
+            <p>Eski soruların resimlerini mobilde de görünür hale getir</p>
+            <button id="migrate-images-btn" class="btn-primary">Resimleri Aktar</button>
+            <div id="migrate-status" class="import-status hidden"></div>
+          </div>
+          
+          <div class="clear-card">
+            <i data-lucide="trash-2" class="card-icon-svg danger-icon"></i>
+            <h3>Verileri Temizle</h3>
+            <p>Tüm soruları ve görselleri sil (geri alınamaz!)</p>
+            <button id="clear-all-btn" class="btn-danger">Tümünü Sil</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Settings Section -->
+      <section id="settings-section" class="section">
+        <div class="section-header">
+          <h2>Oyun Ayarları</h2>
+        </div>
+        
+        <div class="settings-container">
+          <div class="settings-card">
+            <i data-lucide="target" class="card-icon-svg"></i>
+            <h3>Toplam Adım Sayısı</h3>
+            <p>Oyun tahtasındaki bitiş noktasına ulaşmak için gereken toplam adım sayısı</p>
+            <div class="settings-input-group">
+              <input type="number" id="total-steps" min="5" max="100" value="24" class="settings-input">
+              <span class="settings-unit">adım</span>
+            </div>
+            <button id="save-settings-btn" class="btn-primary">
+              <i data-lucide="save" class="btn-icon-svg"></i> Ayarları Kaydet
+            </button>
+            <div id="settings-status" class="settings-status hidden"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div id="delete-modal" class="modal hidden">
+    <div class="modal-content">
+      <h3>Soruyu Sil</h3>
+      <p>Bu soruyu silmek istediğinizden emin misiniz?</p>
+      <div class="modal-buttons">
+        <button id="confirm-delete" class="btn-danger">Sil</button>
+        <button id="cancel-delete" class="btn-secondary">İptal</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>

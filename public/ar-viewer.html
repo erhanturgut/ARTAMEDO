@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>AR Görüntüleyici - ARTAMEDO</title>
+  
+  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar.js"></script>
+  
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Poppins', sans-serif; overflow: hidden; }
+    
+    .ar-overlay {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 999;
+      padding: 20px; background: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent);
+      color: white; text-align: center;
+    }
+    .ar-title { display: none; }
+    .ar-instructions { font-size: 0.9rem; opacity: 0.9; }
+    
+    .ar-close-btn {
+      position: fixed; top: 12px; right: 12px; z-index: 1002;
+      width: 44px; height: 44px; border-radius: 50%;
+      background: rgba(255, 107, 107, 0.9); border: none;
+      color: white; font-size: 22px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    
+    .ar-loading {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      z-index: 999; text-align: center; color: white;
+    }
+    .ar-loading-spinner {
+      width: 60px; height: 60px; border: 4px solid rgba(255,255,255,0.3);
+      border-top-color: #00d4ff; border-radius: 50%;
+      animation: spin 1s linear infinite; margin: 0 auto 15px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    
+    .animation-info {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      background: linear-gradient(135deg, rgba(26, 26, 46, 0.98) 0%, rgba(22, 33, 62, 0.98) 100%);
+      color: white; padding: 16px 20px;
+      text-align: center;
+      border-bottom: 1px solid rgba(99, 102, 241, 0.3);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    }
+    .animation-info h3 { margin-bottom: 4px; color: #4cc9f0; font-weight: 600; font-size: 1.1rem; }
+    .animation-info p { font-size: 0.85rem; line-height: 1.3; color: #94a3b8; }
+    
+    /* AR Kontrol Paneli - Yeni Tasarım */
+    .ar-controls {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 1001;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: white; padding: 20px;
+      border-radius: 24px 24px 0 0;
+      border-top: 1px solid rgba(99, 102, 241, 0.3);
+      box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5);
+    }
+    .ar-controls.hidden { display: none; }
+    
+    .control-row {
+      display: flex; align-items: center; gap: 15px; margin-bottom: 16px;
+    }
+    .control-row:last-child { margin-bottom: 0; }
+    
+    .control-label {
+      font-size: 0.85rem; min-width: 60px; color: #94a3b8;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .control-label svg {
+      width: 18px; height: 18px; stroke: #4cc9f0; stroke-width: 2;
+    }
+    
+    .control-slider {
+      flex: 1; height: 8px; border-radius: 4px;
+      -webkit-appearance: none; appearance: none;
+      background: linear-gradient(90deg, #0f172a 0%, #1e293b 100%);
+      outline: none; border: 1px solid rgba(99, 102, 241, 0.2);
+    }
+    .control-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 22px; height: 22px; border-radius: 50%;
+      background: linear-gradient(135deg, #4cc9f0 0%, #7b2cbf 100%);
+      cursor: pointer; box-shadow: 0 2px 10px rgba(76, 201, 240, 0.5);
+      border: 2px solid white;
+    }
+    .control-slider::-moz-range-thumb {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: linear-gradient(135deg, #4cc9f0 0%, #7b2cbf 100%);
+      cursor: pointer; border: 2px solid white;
+    }
+    
+    .control-value {
+      min-width: 50px; text-align: right; font-size: 0.9rem; 
+      color: #4cc9f0; font-weight: 600;
+    }
+    
+    .control-buttons {
+      display: flex; gap: 15px; justify-content: center; padding-top: 5px;
+    }
+    
+    .control-btn {
+      width: 56px; height: 56px; border-radius: 16px;
+      border: 2px solid transparent; cursor: pointer; 
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    }
+    .control-btn svg {
+      width: 24px; height: 24px; stroke-width: 2.5;
+    }
+    .control-btn:active { transform: scale(0.95); }
+    
+    .btn-play { 
+      background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%); 
+      border-color: rgba(74, 222, 128, 0.3);
+    }
+    .btn-play svg { stroke: white; fill: white; }
+    
+    .btn-pause { 
+      background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); 
+      border-color: rgba(251, 191, 36, 0.3);
+    }
+    .btn-pause svg { stroke: white; }
+    
+    .btn-stop { 
+      background: linear-gradient(135deg, #f87171 0%, #ef4444 100%); 
+      border-color: rgba(248, 113, 113, 0.3);
+    }
+    .btn-stop svg { stroke: white; fill: white; }
+    
+    .toggle-controls-btn {
+      position: fixed; bottom: 20px; right: 20px; z-index: 1002;
+      width: 56px; height: 56px; border-radius: 16px;
+      background: linear-gradient(135deg, #4cc9f0 0%, #7b2cbf 100%);
+      border: 2px solid rgba(99, 102, 241, 0.3);
+      color: white; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 20px rgba(76, 201, 240, 0.4);
+      transition: all 0.3s ease;
+    }
+    .toggle-controls-btn svg {
+      width: 26px; height: 26px; stroke: white; stroke-width: 2;
+    }
+    .toggle-controls-btn.active { 
+      background: linear-gradient(135deg, #f72585 0%, #7b2cbf 100%);
+      box-shadow: 0 4px 20px rgba(247, 37, 133, 0.4);
+    }
+    
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="ar-overlay">
+    <div class="ar-title" id="ar-title">AR Animasyon</div>
+    <div class="ar-instructions" id="ar-instructions">Kamerayı Hiro marker'a doğrultun</div>
+  </div>
+  
+  <button class="ar-close-btn" onclick="closeAR()">✕</button>
+  
+  <div class="ar-loading" id="ar-loading">
+    <div class="ar-loading-spinner"></div>
+    <p>AR Yükleniyor...</p>
+  </div>
+  
+  <div class="animation-info hidden" id="animation-info">
+    <h3 id="info-title">Elektrik Devresi</h3>
+    <p id="info-description">Animasyon açıklaması</p>
+  </div>
+
+  <!-- AR Kontrol Paneli -->
+  <button class="toggle-controls-btn" id="toggle-controls" onclick="toggleControls()">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+  </button>
+  
+  <div class="ar-controls hidden" id="ar-controls">
+    <div class="control-row">
+      <span class="control-label">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M21 21H3V3"/><path d="M21 9L15 15 9 9 3 15"/></svg>
+        Boyut
+      </span>
+      <input type="range" class="control-slider" id="scale-slider" min="0.01" max="1" step="0.01" value="0.1">
+      <span class="control-value" id="scale-value">0.1x</span>
+    </div>
+    <div class="control-row" id="timeline-row">
+      <span class="control-label">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+        Zaman
+      </span>
+      <input type="range" class="control-slider" id="timeline-slider" min="0" max="100" step="0.1" value="0">
+      <span class="control-value" id="timeline-value">0:00</span>
+    </div>
+    <div class="control-row">
+      <div class="control-buttons">
+        <button class="control-btn btn-play" id="btn-play" onclick="playAnimation()">
+          <svg viewBox="0 0 24 24" fill="none"><polygon points="5,3 19,12 5,21 5,3"/></svg>
+        </button>
+        <button class="control-btn btn-pause" id="btn-pause" onclick="pauseAnimation()">
+          <svg viewBox="0 0 24 24" fill="none"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+        </button>
+        <button class="control-btn btn-stop" id="btn-stop" onclick="stopAnimation()">
+          <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATIC A-Frame Scene with Hiro marker -->
+  <a-scene embedded arjs="debugUIEnabled: false;" vr-mode-ui="enabled: false">
+    <a-marker preset="hiro" id="ar-marker">
+      <a-entity id="ar-content"></a-entity>
+    </a-marker>
+    <a-entity camera></a-entity>
+  </a-scene>
+
+  <script>
+    // Tam ekran fonksiyonları
+    function enterFullscreen() {
+      const elem = document.documentElement;
+      if (elem.requestFullscreen) {
+        elem.requestFullscreen().catch(() => {});
+      } else if (elem.webkitRequestFullscreen) {
+        elem.webkitRequestFullscreen();
+      } else if (elem.mozRequestFullScreen) {
+        elem.mozRequestFullScreen();
+      } else if (elem.msRequestFullscreen) {
+        elem.msRequestFullscreen();
+      }
+    }
+    
+    // Sayfa yüklenince tam ekran aç
+    document.addEventListener('DOMContentLoaded', () => {
+      // Kullanıcı etkileşiminde tam ekran aç
+      const tryFullscreen = () => {
+        enterFullscreen();
+        document.removeEventListener('click', tryFullscreen);
+        document.removeEventListener('touchstart', tryFullscreen);
+      };
+      document.addEventListener('click', tryFullscreen);
+      document.addEventListener('touchstart', tryFullscreen);
+      
+      // Hemen dene (bazı tarayıcılarda çalışabilir)
+      setTimeout(enterFullscreen, 100);
+    });
+    
+    // Animation configurations
+    const animations = {
+      circuit: {
+        title: 'Elektrik Devresi',
+        description: 'Basit bir elektrik devresinde akım akışını gösteren animasyon'
+      },
+      bulb: {
+        title: 'Ampul Yanıp Sönme',
+        description: 'Elektrik akımı ile ampulün yanıp sönmesi'
+      },
+      current: {
+        title: 'Akım Akışı',
+        description: 'Elektrik akımının iletken içinde hareket etmesi'
+      },
+      resistance: {
+        title: 'Direnç',
+        description: 'Elektrik direncinin akım üzerindeki etkisi'
+      },
+      voltage: {
+        title: 'Voltaj',
+        description: 'Elektrik potansiyel farkı animasyonu'
+      },
+      custom: {
+        title: 'Özel 3D Model',
+        description: 'Yüklenen özel 3D model animasyonu'
+      }
+    };
+    
+    // Parse data from localStorage or URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const fromStorage = urlParams.get('fromStorage') === 'true';
+    
+    let animationType = 'circuit';
+    let animationTitle = 'AR Animasyon';
+    let modelUrl = '';
+    let modelTitle = '';
+    let modelDescription = '';
+    let aframeCode = '';
+    
+    // Her zaman localStorage'dan veri okumaya çalış
+    const storedData = localStorage.getItem('ar-animation-data');
+    if (storedData) {
+      const arData = JSON.parse(storedData);
+      animationType = arData.type || 'circuit';
+      animationTitle = arData.title || 'AR Animasyon';
+      modelUrl = arData.modelUrl || '';
+      modelTitle = arData.modelTitle || '';
+      modelDescription = arData.modelDescription || '';
+      aframeCode = arData.aframeCode || '';
+      console.log('Loaded from storage:', animationType, 'modelUrl:', modelUrl, 'modelTitle:', modelTitle);
+      
+      // Custom tip için animations objesini güncelle
+      if (animationType === 'custom' && (modelTitle || modelDescription)) {
+        animations.custom = {
+          title: modelTitle || 'Özel 3D Model',
+          description: modelDescription || 'Yüklenen özel 3D model animasyonu'
+        };
+      }
+    }
+    
+    // URL parametrelerinden de oku (fallback)
+    if (!storedData) {
+      animationType = urlParams.get('type') || 'circuit';
+      animationTitle = decodeURIComponent(urlParams.get('title') || 'AR Animasyon');
+    }
+    
+    document.getElementById('ar-title').textContent = modelTitle || animationTitle;
+    
+    // Wait for scene to load
+    const scene = document.querySelector('a-scene');
+    
+    scene.addEventListener('loaded', function() {
+      console.log('Scene loaded!');
+      
+      const content = document.getElementById('ar-content');
+      if (!content) {
+        console.error('ar-content not found');
+        return;
+      }
+      
+      // Create animation
+      createAnimation(content, animationType, modelUrl, aframeCode);
+      
+      // Hide loading
+      setTimeout(() => {
+        document.getElementById('ar-loading').classList.add('hidden');
+      }, 1000);
+    });
+    
+    // Marker events
+    const marker = document.getElementById('ar-marker');
+    marker.addEventListener('markerFound', () => {
+      console.log('Marker bulundu!');
+      document.getElementById('ar-loading').classList.add('hidden');
+      document.getElementById('ar-instructions').classList.add('hidden');
+      
+      const anim = animations[animationType] || animations.circuit;
+      document.getElementById('info-title').textContent = anim.title;
+      document.getElementById('info-description').textContent = anim.description;
+      document.getElementById('animation-info').classList.remove('hidden');
+      
+      // Animasyonu otomatik başlat
+      setTimeout(() => {
+        setupModelControls();
+        playAnimation();
+      }, 500);
+    });
+    
+    marker.addEventListener('markerLost', () => {
+      console.log('Marker kaybedildi');
+      document.getElementById('animation-info').classList.add('hidden');
+      document.getElementById('ar-instructions').classList.remove('hidden');
+    });
+    
+    // Create animation
+    function createAnimation(parent, type, modelUrl, aframeCode) {
+      console.log('Creating animation:', type, 'modelUrl:', modelUrl);
+      
+      switch(type) {
+        case 'custom':
+          // Özel 3D Model (.glb/.gltf)
+          if (modelUrl) {
+            const model = document.createElement('a-entity');
+            model.setAttribute('gltf-model', modelUrl);
+            model.setAttribute('position', '0 0.1 0');
+            model.setAttribute('scale', '0.1 0.1 0.1');
+            model.setAttribute('animation-mixer', 'clip: *; loop: repeat');
+            model.setAttribute('id', 'custom-model');
+            parent.appendChild(model);
+            
+            // currentModel'ı hemen ata
+            currentModel = model;
+            
+            // Model yüklenince animasyonu başlat
+            model.addEventListener('model-loaded', function() {
+              console.log('Custom 3D model loaded:', modelUrl);
+              playAnimation();
+            });
+          } else {
+            console.error('Model URL not provided for custom type');
+            // Fallback - basit küp göster
+            createBox(parent, {position: '0 0.5 0', width: 0.5, height: 0.5, depth: 0.5, color: '#9c27b0'}, 
+                      {property: 'rotation', to: '0 360 0', dur: 2000, loop: true, easing: 'linear'});
+          }
+          break;
+          
+        case 'custom-aframe':
+          // Özel A-Frame Kodu
+          if (aframeCode) {
+            try {
+              // A-Frame kodunu parse et ve ekle
+              const tempDiv = document.createElement('div');
+              tempDiv.innerHTML = aframeCode.trim();
+              
+              // Tüm child elementleri parent'a ekle
+              while (tempDiv.firstChild) {
+                if (tempDiv.firstChild.nodeType === 1) { // Element node
+                  parent.appendChild(tempDiv.firstChild);
+                } else {
+                  tempDiv.removeChild(tempDiv.firstChild);
+                }
+              }
+              console.log('Custom A-Frame code loaded');
+            } catch (e) {
+              console.error('A-Frame kod hatası:', e);
+              createBox(parent, {position: '0 0.5 0', width: 0.5, height: 0.5, depth: 0.5, color: '#f44336'}, 
+                        {property: 'rotation', to: '0 360 0', dur: 2000, loop: true, easing: 'linear'});
+            }
+          } else {
+            console.error('A-Frame code not provided');
+            createBox(parent, {position: '0 0.5 0', width: 0.5, height: 0.5, depth: 0.5, color: '#f44336'}, 
+                      {property: 'rotation', to: '0 360 0', dur: 2000, loop: true, easing: 'linear'});
+          }
+          break;
+        
+        case 'circuit':
+          createBox(parent, {position: '0 0.5 0', width: 1, height: 1, depth: 1, color: 'red'}, 
+                    {property: 'rotation', to: '0 360 0', dur: 2000, loop: true, easing: 'linear'});
+          break;
+          
+        case 'bulb':
+          createSphere(parent, {position: '0 0.5 0', radius: 0.3, color: '#ffeb3b'},
+                       {property: 'scale', from: '1 1 1', to: '1.3 1.3 1.3', dur: 600, loop: true, dir: 'alternate'});
+          createCylinder(parent, {position: '0 0.15 0', radius: 0.1, height: 0.2, color: '#666'});
+          break;
+          
+        case 'current':
+          createCylinder(parent, {position: '0 0.2 0', radius: 0.08, height: 1, rotation: '0 0 90', color: '#b87333'});
+          createSphere(parent, {position: '-0.4 0.2 0', radius: 0.06, color: '#4fc3f7'},
+                       {property: 'position', from: '-0.4 0.2 0', to: '0.4 0.2 0', dur: 1000, loop: true, easing: 'linear'});
+          createSphere(parent, {position: '0 0.2 0', radius: 0.06, color: '#4fc3f7'},
+                       {property: 'position', from: '-0.4 0.2 0', to: '0.4 0.2 0', dur: 1000, loop: true, delay: 333, easing: 'linear'});
+          createSphere(parent, {position: '0.4 0.2 0', radius: 0.06, color: '#4fc3f7'},
+                       {property: 'position', from: '-0.4 0.2 0', to: '0.4 0.2 0', dur: 1000, loop: true, delay: 666, easing: 'linear'});
+          break;
+          
+        case 'resistance':
+          createBox(parent, {position: '0 0.25 0', width: 0.6, height: 0.2, depth: 0.2, color: '#d4a574'});
+          createBox(parent, {position: '-0.15 0.25 0.11', width: 0.06, height: 0.21, depth: 0.01, color: '#8B4513'});
+          createBox(parent, {position: '0.05 0.25 0.11', width: 0.06, height: 0.21, depth: 0.01, color: 'red'});
+          createBox(parent, {position: '0.2 0.25 0.11', width: 0.06, height: 0.21, depth: 0.01, color: 'gold'});
+          break;
+          
+        case 'voltage':
+          createBox(parent, {position: '0 0.3 0', width: 0.6, height: 0.35, depth: 0.3, color: '#333'});
+          createCylinder(parent, {position: '0.35 0.32 0', radius: 0.05, height: 0.12, rotation: '0 0 90', color: 'red'});
+          createCylinder(parent, {position: '-0.35 0.32 0', radius: 0.05, height: 0.12, rotation: '0 0 90', color: 'blue'});
+          createBox(parent, {position: '0 0.6 0', width: 0.04, height: 0.2, depth: 0.04, color: 'yellow'},
+                    {property: 'scale', from: '1 0.5 1', to: '1 2 1', dur: 500, loop: true, dir: 'alternate'});
+          break;
+          
+        default:
+          createBox(parent, {position: '0 0.5 0', width: 1, height: 1, depth: 1, color: 'red'},
+                    {property: 'rotation', to: '0 360 0', dur: 2000, loop: true, easing: 'linear'});
+      }
+      
+      console.log('Animation created, children:', parent.children.length);
+    }
+    
+    // Helper functions
+    function createBox(parent, attrs, anim) {
+      const el = document.createElement('a-box');
+      setAttributes(el, attrs);
+      if (anim) setAnimation(el, anim);
+      parent.appendChild(el);
+    }
+    
+    function createSphere(parent, attrs, anim) {
+      const el = document.createElement('a-sphere');
+      setAttributes(el, attrs);
+      if (anim) setAnimation(el, anim);
+      parent.appendChild(el);
+    }
+    
+    function createCylinder(parent, attrs, anim) {
+      const el = document.createElement('a-cylinder');
+      setAttributes(el, attrs);
+      if (anim) setAnimation(el, anim);
+      parent.appendChild(el);
+    }
+    
+    function setAttributes(el, attrs) {
+      for (const [key, value] of Object.entries(attrs)) {
+        el.setAttribute(key, value);
+      }
+    }
+    
+    function setAnimation(el, anim) {
+      const animStr = Object.entries(anim).map(([k, v]) => `${k}: ${v}`).join('; ');
+      el.setAttribute('animation', animStr);
+    }
+    
+    function closeAR() {
+      // LocalStorage'u temizle
+      localStorage.removeItem('ar-animation-data');
+      
+      // iframe içindeyse parent'a mesaj gönder
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'close-ar' }, '*');
+      } else {
+        // Doğrudan açılmışsa geri git
+        window.history.back();
+      }
+    }
+    
+    // AR Kontrol Fonksiyonları
+    let currentModel = null;
+    let isPlaying = true;
+    let animationDuration = 0;
+    let timelineUpdateInterval = null;
+    let isDraggingTimeline = false;
+    
+    function toggleControls() {
+      const controls = document.getElementById('ar-controls');
+      const btn = document.getElementById('toggle-controls');
+      controls.classList.toggle('hidden');
+      btn.classList.toggle('active');
+    }
+    
+    // Zamanı formatla (saniye -> mm:ss)
+    function formatTime(seconds) {
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    // Timeline güncelleme fonksiyonu
+    function updateTimelineDisplay() {
+      if (isDraggingTimeline || !isPlaying) return;
+      
+      if (currentModel) {
+        const mixerComp = currentModel.components['animation-mixer'];
+        if (mixerComp && mixerComp.mixer) {
+          const mixer = mixerComp.mixer;
+          const actions = mixer._actions;
+          
+          if (actions && actions.length > 0) {
+            const action = actions[0];
+            if (action && action._clip) {
+              const duration = action._clip.duration;
+              const currentTime = action.time % duration;
+              const percent = (currentTime / duration) * 100;
+              
+              document.getElementById('timeline-slider').value = percent;
+              document.getElementById('timeline-value').textContent = formatTime(currentTime);
+              
+              // Duration'ı kaydet
+              animationDuration = duration;
+            }
+          }
+        }
+      }
+    }
+    
+    // Timeline güncelleme döngüsünü başlat
+    function startTimelineUpdate() {
+      if (timelineUpdateInterval) clearInterval(timelineUpdateInterval);
+      timelineUpdateInterval = setInterval(updateTimelineDisplay, 100);
+    }
+    
+    // Boyut kontrolü
+    document.getElementById('scale-slider').addEventListener('input', function(e) {
+      const scale = parseFloat(e.target.value);
+      document.getElementById('scale-value').textContent = scale.toFixed(2) + 'x';
+      
+      // Model varsa boyutunu değiştir
+      const content = document.getElementById('ar-content');
+      if (content && content.children.length > 0) {
+        for (let child of content.children) {
+          child.setAttribute('scale', `${scale} ${scale} ${scale}`);
+        }
+      }
+    });
+    
+    // Timeline sürükleme başlangıcı
+    document.getElementById('timeline-slider').addEventListener('mousedown', () => isDraggingTimeline = true);
+    document.getElementById('timeline-slider').addEventListener('touchstart', () => isDraggingTimeline = true);
+    
+    // Timeline sürükleme bitişi
+    document.getElementById('timeline-slider').addEventListener('mouseup', () => isDraggingTimeline = false);
+    document.getElementById('timeline-slider').addEventListener('touchend', () => isDraggingTimeline = false);
+    
+    // Timeline kontrolü
+    document.getElementById('timeline-slider').addEventListener('input', function(e) {
+      const percent = parseFloat(e.target.value);
+      
+      // GLB model animasyonunu kontrol et
+      if (currentModel) {
+        const mixerComp = currentModel.components['animation-mixer'];
+        if (mixerComp && mixerComp.mixer) {
+          const mixer = mixerComp.mixer;
+          
+          // Tüm action'ları belirli zamana götür
+          const actions = mixer._actions;
+          if (actions && actions.length > 0) {
+            for (let action of actions) {
+              if (action._clip) {
+                const duration = action._clip.duration;
+                const time = (percent / 100) * duration;
+                action.time = time;
+                
+                document.getElementById('timeline-value').textContent = formatTime(time);
+              }
+            }
+            mixer.update(0);
+          }
+        }
+      }
+    });
+    
+    function playAnimation() {
+      isPlaying = true;
+      
+      // GLB model animasyonu
+      if (currentModel) {
+        const mixerComp = currentModel.components['animation-mixer'];
+        if (mixerComp && mixerComp.mixer) {
+          mixerComp.mixer.timeScale = 1;
+        }
+      }
+      
+      // A-Frame animasyonları
+      const content = document.getElementById('ar-content');
+      if (content) {
+        for (let child of content.children) {
+          if (child.components && child.components.animation) {
+            child.setAttribute('animation', 'enabled', true);
+          }
+        }
+      }
+      
+      startTimelineUpdate();
+    }
+    
+    function pauseAnimation() {
+      isPlaying = false;
+      
+      // GLB model animasyonu
+      if (currentModel) {
+        const mixerComp = currentModel.components['animation-mixer'];
+        if (mixerComp && mixerComp.mixer) {
+          mixerComp.mixer.timeScale = 0;
+        }
+      }
+      
+      // A-Frame animasyonları
+      const content = document.getElementById('ar-content');
+      if (content) {
+        for (let child of content.children) {
+          if (child.components && child.components.animation) {
+            child.setAttribute('animation', 'enabled', false);
+          }
+        }
+      }
+    }
+    
+    function stopAnimation() {
+      isPlaying = false;
+      
+      // GLB model animasyonu - başa sar ve durdur
+      if (currentModel) {
+        const mixerComp = currentModel.components['animation-mixer'];
+        if (mixerComp && mixerComp.mixer) {
+          const mixer = mixerComp.mixer;
+          mixer.timeScale = 0;
+          
+          const actions = mixer._actions;
+          if (actions) {
+            for (let action of actions) {
+              action.time = 0;
+            }
+            mixer.update(0);
+          }
+        }
+      }
+      
+      // Timeline'ı sıfırla
+      document.getElementById('timeline-slider').value = 0;
+      document.getElementById('timeline-value').textContent = '0:00';
+    }
+    
+    // Model yüklendiğinde referansı kaydet
+    function setupModelControls() {
+      const content = document.getElementById('ar-content');
+      if (content && content.children.length > 0) {
+        for (let child of content.children) {
+          if (child.hasAttribute('gltf-model')) {
+            currentModel = child;
+            
+            // Model yüklenince animation-mixer'ı kontrol et
+            child.addEventListener('model-loaded', function() {
+              console.log('Model loaded, setting up controls');
+              const mixerComp = child.components['animation-mixer'];
+              if (mixerComp && mixerComp.mixer) {
+                console.log('Animation mixer found');
+                // Timeline güncellemeyi başlat
+                startTimelineUpdate();
+              }
+            });
+            break;
+          }
+        }
+      }
+    }
+    
+    // Sayfa yüklenince kontrolleri kur
+    setTimeout(setupModelControls, 2000);
+  </script>
+</body>
+</html>

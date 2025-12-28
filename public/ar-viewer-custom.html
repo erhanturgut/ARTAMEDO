@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>AR Görüntüleyici (Özel Marker) - ARTAMEDO</title>
+  
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Poppins', sans-serif; overflow: hidden; background: #000; }
+    
+    .ar-overlay {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      padding: 20px; background: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent);
+      color: white; text-align: center;
+    }
+    .ar-title { font-size: 1.2rem; font-weight: 600; margin-bottom: 8px; }
+    .ar-instructions { font-size: 0.9rem; opacity: 0.9; }
+    
+    .ar-close-btn {
+      position: fixed; top: 20px; right: 20px; z-index: 1001;
+      width: 50px; height: 50px; border-radius: 50%;
+      background: rgba(255, 107, 107, 0.9); border: none;
+      color: white; font-size: 24px; cursor: pointer;
+    }
+    
+    .ar-loading {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      z-index: 999; text-align: center; color: white;
+    }
+    .ar-loading-spinner {
+      width: 60px; height: 60px; border: 4px solid rgba(255,255,255,0.3);
+      border-top-color: #00d4ff; border-radius: 50%;
+      animation: spin 1s linear infinite; margin: 0 auto 15px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    
+    .animation-info {
+      position: fixed; bottom: 20px; left: 20px; right: 20px; z-index: 1000;
+      background: rgba(0,0,0,0.85); color: white; padding: 20px;
+      border-radius: 16px; text-align: center;
+    }
+    .animation-info h3 { margin-bottom: 10px; color: #00d4ff; }
+    .animation-info p { font-size: 0.95rem; line-height: 1.5; }
+    
+    .hidden { display: none !important; }
+    
+    .setup-container {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      z-index: 2000; background: white; padding: 30px; border-radius: 16px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.3); text-align: center; max-width: 90%; width: 400px;
+    }
+    .setup-container h2 { margin-bottom: 20px; color: #333; }
+    .setup-container p { color: #666; margin-bottom: 20px; }
+    .setup-container input[type="file"] { margin: 15px 0; }
+    .setup-container button {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white; border: none; padding: 12px 30px;
+      border-radius: 8px; font-size: 1rem; cursor: pointer;
+      margin: 10px 5px; width: 100%;
+    }
+    .setup-container button:hover { opacity: 0.9; }
+    .setup-container button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .setup-container .secondary-btn { background: #ccc; color: #333; }
+    .setup-container .status { margin-top: 15px; padding: 10px; border-radius: 8px; }
+    .setup-container .status.loading { background: #e3f2fd; color: #1976d2; }
+    .setup-container .status.error { background: #ffebee; color: #c62828; }
+    .setup-container .status.success { background: #e8f5e9; color: #2e7d32; }
+  </style>
+</head>
+<body>
+  <!-- Setup ekranı - pattern dosyası seçimi -->
+  <div class="setup-container" id="setup-container">
+    <h2>📍 Özel Marker AR</h2>
+    <p>AR animasyonu için .patt pattern dosyası yükleyin</p>
+    
+    <input type="file" id="pattern-file" accept=".patt" style="width: 100%;">
+    
+    <button id="upload-btn" onclick="uploadAndStart()">Pattern Yükle ve Başlat</button>
+    <button class="secondary-btn" onclick="useHiroMarker()">Hiro Marker Kullan</button>
+    
+    <div class="status hidden" id="status-message"></div>
+  </div>
+
+  <div class="ar-overlay hidden" id="ar-overlay">
+    <div class="ar-title" id="ar-title">AR Animasyon</div>
+    <div class="ar-instructions">Kamerayı özel marker'a doğrultun</div>
+  </div>
+  
+  <button class="ar-close-btn hidden" id="close-btn" onclick="closeAR()">✕</button>
+  
+  <div class="ar-loading hidden" id="ar-loading">
+    <div class="ar-loading-spinner"></div>
+    <p>AR Yükleniyor...</p>
+  </div>
+  
+  <div class="animation-info hidden" id="animation-info">
+    <h3 id="info-title">Elektrik Devresi</h3>
+    <p id="info-description">Animasyon açıklaması</p>
+  </div>
+
+  <script>
+    const animations = {
+      circuit: { title: 'Elektrik Devresi', description: 'Basit bir elektrik devresinde akım akışını gösteren animasyon' },
+      bulb: { title: 'Ampul Yanıp Sönme', description: 'Elektrik akımı ile ampulün yanıp sönmesi' },
+      current: { title: 'Akım Akışı', description: 'Elektrik akımının iletken içinde hareket etmesi' },
+      resistance: { title: 'Direnç', description: 'Elektrik direncinin akım üzerindeki etkisi' },
+      voltage: { title: 'Voltaj', description: 'Elektrik potansiyel farkı animasyonu' }
+    };
+
+    function getUrlParams() {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        type: params.get('type') || 'circuit',
+        pattern: params.get('pattern') || null
+      };
+    }
+
+    function showStatus(message, type) {
+      const status = document.getElementById('status-message');
+      status.textContent = message;
+      status.className = `status ${type}`;
+      status.classList.remove('hidden');
+    }
+
+    function hideStatus() {
+      document.getElementById('status-message').classList.add('hidden');
+    }
+
+    async function uploadAndStart() {
+      const fileInput = document.getElementById('pattern-file');
+      const file = fileInput.files[0];
+      
+      if (!file) {
+        showStatus('Lütfen bir .patt dosyası seçin', 'error');
+        return;
+      }
+      
+      showStatus('Pattern yükleniyor...', 'loading');
+      document.getElementById('upload-btn').disabled = true;
+      
+      try {
+        // Dosyayı oku
+        const reader = new FileReader();
+        const patternData = await new Promise((resolve, reject) => {
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        
+        // Sunucuya yükle
+        const response = await fetch('/api/upload-pattern', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            patternData: patternData,
+            filename: `marker-${Date.now()}.patt`
+          })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          showStatus('Pattern yüklendi! AR başlatılıyor...', 'success');
+          
+          // Sunucu tarafında oluşturulan dinamik sayfaya yönlendir
+          const params = getUrlParams();
+          setTimeout(() => {
+            window.location.href = `/ar-custom?type=${params.type}&pattern=${encodeURIComponent(result.url)}`;
+          }, 1000);
+        } else {
+          throw new Error(result.error || 'Yükleme başarısız');
+        }
+      } catch (error) {
+        console.error('Upload error:', error);
+        showStatus('Hata: ' + error.message, 'error');
+        document.getElementById('upload-btn').disabled = false;
+      }
+    }
+    function useHiroMarker() {
+      const params = getUrlParams();
+      window.location.href = `ar-viewer.html?type=${params.type}`;
+    }
+
+    function closeAR() {
+      window.close();
+      setTimeout(() => { window.location.href = 'admin.html'; }, 100);
+    }
+
+    // Sayfa yüklendiğinde
+    document.addEventListener('DOMContentLoaded', () => {
+      const params = getUrlParams();
+      
+      // localStorage'dan pattern kontrolü
+      try {
+        const arData = JSON.parse(localStorage.getItem('ar-animation-data') || '{}');
+        if (arData.markerUrl && arData.markerUrl.startsWith('data:')) {
+          // localStorage'da pattern var, otomatik yükle
+          document.getElementById('status-message').textContent = 'Kayıtlı pattern bulundu, yükleniyor...';
+          document.getElementById('status-message').className = 'status loading';
+          document.getElementById('status-message').classList.remove('hidden');
+          
+          fetch('/api/upload-pattern', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              patternData: arData.markerUrl,
+              filename: `marker-${Date.now()}.patt`
+            })
+          })
+          .then(res => res.json())
+          .then(result => {
+            if (result.success) {
+              // Sunucu tarafında dinamik sayfa oluştur
+              window.location.href = `/ar-custom?type=${params.type}&pattern=${encodeURIComponent(result.url)}`;
+            }
+          })
+          .catch(err => {
+            console.error('Auto-upload failed:', err);
+            hideStatus();
+          });
+        }
+      } catch (e) {
+        console.log('No stored pattern');
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>AR Görüntüleyici - ARTAMEDO</title>
+  
+  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar.js"></script>
+  
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Poppins', sans-serif; overflow: hidden; }
+    
+    .ar-overlay {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      padding: 20px; background: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent);
+      color: white; text-align: center;
+    }
+    .ar-title { font-size: 1.2rem; font-weight: 600; margin-bottom: 8px; }
+    .ar-instructions { font-size: 0.9rem; opacity: 0.9; }
+    
+    .ar-close-btn {
+      position: fixed; top: 20px; right: 20px; z-index: 1001;
+      width: 50px; height: 50px; border-radius: 50%;
+      background: rgba(255, 107, 107, 0.9); border: none;
+      color: white; font-size: 24px; cursor: pointer;
+    }
+    
+    .ar-loading {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      z-index: 999; text-align: center; color: white;
+    }
+    .ar-loading-spinner {
+      width: 60px; height: 60px; border: 4px solid rgba(255,255,255,0.3);
+      border-top-color: #00d4ff; border-radius: 50%;
+      animation: spin 1s linear infinite; margin: 0 auto 15px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    
+    .animation-info {
+      position: fixed; bottom: 20px; left: 20px; right: 20px; z-index: 1000;
+      background: rgba(0,0,0,0.85); color: white; padding: 20px;
+      border-radius: 16px; text-align: center;
+    }
+    .animation-info h3 { margin-bottom: 10px; color: #00d4ff; }
+    .animation-info p { font-size: 0.95rem; line-height: 1.5; }
+    
+    .hidden { display: none !important; }
+    
+    .error-message {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: white; padding: 30px; border-radius: 16px; text-align: center;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.3); z-index: 2000;
+    }
+    .error-message h2 { color: #e53935; margin-bottom: 15px; }
+    .error-message button {
+      background: #667eea; color: white; border: none; padding: 12px 30px;
+      border-radius: 8px; cursor: pointer; margin: 10px 5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="ar-overlay">
+    <div class="ar-title" id="ar-title">AR Animasyon</div>
+    <div class="ar-instructions">Kamerayı özel marker'a doğrultun</div>
+  </div>
+  
+  <button class="ar-close-btn" onclick="closeAR()">✕</button>
+  
+  <div class="ar-loading" id="ar-loading">
+    <div class="ar-loading-spinner"></div>
+    <p>AR Yükleniyor...</p>
+  </div>
+  
+  <div class="animation-info hidden" id="animation-info">
+    <h3 id="info-title">Elektrik Devresi</h3>
+    <p id="info-description">Animasyon açıklaması</p>
+  </div>
+
+  <div class="error-message hidden" id="error-message">
+    <h2>⚠️ Pattern Bulunamadı</h2>
+    <p>AR marker pattern dosyası belirtilmemiş.</p>
+    <button onclick="window.location.href='ar-viewer-custom.html'">Pattern Yükle</button>
+    <button onclick="window.location.href='ar-viewer.html'">Hiro Marker Kullan</button>
+  </div>
+
+  <!-- A-Frame Scene - Pattern URL dinamik olarak JavaScript ile ayarlanacak -->
+  <a-scene id="ar-scene" class="hidden" embedded arjs="debugUIEnabled: false; patternRatio: 0.9;" vr-mode-ui="enabled: false">
+    <a-marker id="ar-marker" type="pattern" url="">
+      <a-entity id="ar-content"></a-entity>
+    </a-marker>
+    <a-entity camera></a-entity>
+  </a-scene>
+
+  <script>
+    const animations = {
+      circuit: { title: 'Elektrik Devresi', description: 'Basit bir elektrik devresinde akım akışını gösteren animasyon' },
+      bulb: { title: 'Ampul Yanıp Sönme', description: 'Elektrik akımı ile ampulün yanıp sönmesi' },
+      current: { title: 'Akım Akışı', description: 'Elektrik akımının iletken içinde hareket etmesi' },
+      resistance: { title: 'Direnç', description: 'Elektrik direncinin akım üzerindeki etkisi' },
+      voltage: { title: 'Voltaj', description: 'Elektrik potansiyel farkı animasyonu' }
+    };
+
+    function getUrlParams() {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        type: params.get('type') || 'circuit',
+        pattern: params.get('pattern') || null
+      };
+    }
+
+    function closeAR() {
+      window.close();
+      setTimeout(() => { window.location.href = 'admin.html'; }, 100);
+    }
+
+    function showError() {
+      document.getElementById('ar-loading').classList.add('hidden');
+      document.getElementById('error-message').classList.remove('hidden');
+    }
+
+    function initAR() {
+      const params = getUrlParams();
+      
+      if (!params.pattern) {
+        showError();
+        return;
+      }
+
+      // Animasyon bilgilerini güncelle
+      const animConfig = animations[params.type] || animations.circuit;
+      document.getElementById('ar-title').textContent = animConfig.title;
+      document.getElementById('info-title').textContent = animConfig.title;
+      document.getElementById('info-description').textContent = animConfig.description;
+
+      // Marker URL'ini ayarla
+      const marker = document.getElementById('ar-marker');
+      marker.setAttribute('url', decodeURIComponent(params.pattern));
+
+      // Scene'i göster
+      document.getElementById('ar-scene').classList.remove('hidden');
+
+      // Scene yüklendiğinde
+      const scene = document.querySelector('a-scene');
+      
+      const onSceneLoaded = () => {
+        console.log('AR Scene loaded with pattern:', params.pattern);
+        document.getElementById('ar-loading').classList.add('hidden');
+        addAnimationContent(params.type);
+        setupMarkerEvents();
+      };
+
+      if (scene.hasLoaded) {
+        onSceneLoaded();
+      } else {
+        scene.addEventListener('loaded', onSceneLoaded);
+      }
+    }
+
+    function addAnimationContent(type) {
+      const content = document.getElementById('ar-content');
+      if (!content) return;
+
+      // Temizle
+      while (content.firstChild) {
+        content.removeChild(content.firstChild);
+      }
+
+      switch(type) {
+        case 'circuit': createCircuitAnimation(content); break;
+        case 'bulb': createBulbAnimation(content); break;
+        case 'current': createCurrentAnimation(content); break;
+        case 'resistance': createResistanceAnimation(content); break;
+        case 'voltage': createVoltageAnimation(content); break;
+        default: createCircuitAnimation(content);
+      }
+    }
+
+    function createCircuitAnimation(parent) {
+      const battery = document.createElement('a-box');
+      battery.setAttribute('position', '-0.4 0.1 0');
+      battery.setAttribute('width', '0.15');
+      battery.setAttribute('height', '0.25');
+      battery.setAttribute('depth', '0.08');
+      battery.setAttribute('color', '#ff4444');
+      parent.appendChild(battery);
+
+      const bulbBase = document.createElement('a-cylinder');
+      bulbBase.setAttribute('position', '0.4 0.05 0');
+      bulbBase.setAttribute('radius', '0.08');
+      bulbBase.setAttribute('height', '0.1');
+      bulbBase.setAttribute('color', '#888888');
+      parent.appendChild(bulbBase);
+
+      const bulb = document.createElement('a-sphere');
+      bulb.setAttribute('position', '0.4 0.18 0');
+      bulb.setAttribute('radius', '0.1');
+      bulb.setAttribute('color', '#ffff00');
+      bulb.setAttribute('material', 'emissive: #ffff00; emissiveIntensity: 0.5');
+      bulb.setAttribute('animation', 'property: material.emissiveIntensity; from: 0.2; to: 1; dur: 500; dir: alternate; loop: true');
+      parent.appendChild(bulb);
+
+      const wire = document.createElement('a-box');
+      wire.setAttribute('position', '0 0 0');
+      wire.setAttribute('width', '0.65');
+      wire.setAttribute('height', '0.02');
+      wire.setAttribute('depth', '0.02');
+      wire.setAttribute('color', '#333333');
+      parent.appendChild(wire);
+
+      const electron = document.createElement('a-sphere');
+      electron.setAttribute('radius', '0.03');
+      electron.setAttribute('color', '#00d4ff');
+      electron.setAttribute('material', 'emissive: #00d4ff; emissiveIntensity: 1');
+      electron.setAttribute('position', '-0.3 0 0');
+      electron.setAttribute('animation', 'property: position; from: -0.3 0 0; to: 0.3 0 0; dur: 1000; loop: true');
+      parent.appendChild(electron);
+    }
+
+    function createBulbAnimation(parent) {
+      const socket = document.createElement('a-cylinder');
+      socket.setAttribute('position', '0 0 0');
+      socket.setAttribute('radius', '0.1');
+      socket.setAttribute('height', '0.15');
+      socket.setAttribute('color', '#666666');
+      parent.appendChild(socket);
+
+      const glass = document.createElement('a-sphere');
+      glass.setAttribute('position', '0 0.2 0');
+      glass.setAttribute('radius', '0.18');
+      glass.setAttribute('color', '#ffffcc');
+      glass.setAttribute('material', 'transparent: true; opacity: 0.8; emissive: #ffff00; emissiveIntensity: 0.3');
+      glass.setAttribute('animation', 'property: material.emissiveIntensity; from: 0.1; to: 1; dur: 800; dir: alternate; loop: true');
+      parent.appendChild(glass);
+
+      const filament = document.createElement('a-box');
+      filament.setAttribute('position', '0 0.18 0');
+      filament.setAttribute('width', '0.02');
+      filament.setAttribute('height', '0.12');
+      filament.setAttribute('depth', '0.02');
+      filament.setAttribute('color', '#ff6600');
+      filament.setAttribute('material', 'emissive: #ff6600; emissiveIntensity: 0.5');
+      filament.setAttribute('animation', 'property: material.emissiveIntensity; from: 0.3; to: 1; dur: 800; dir: alternate; loop: true');
+      parent.appendChild(filament);
+    }
+
+    function createCurrentAnimation(parent) {
+      const wire = document.createElement('a-box');
+      wire.setAttribute('position', '0 0 0');
+      wire.setAttribute('width', '1');
+      wire.setAttribute('height', '0.08');
+      wire.setAttribute('depth', '0.08');
+      wire.setAttribute('color', '#cc6600');
+      wire.setAttribute('material', 'metalness: 0.8; roughness: 0.2');
+      parent.appendChild(wire);
+
+      for (let i = 0; i < 5; i++) {
+        const electron = document.createElement('a-sphere');
+        electron.setAttribute('radius', '0.035');
+        electron.setAttribute('color', '#00d4ff');
+        electron.setAttribute('material', 'emissive: #00d4ff; emissiveIntensity: 1');
+        electron.setAttribute('position', `${-0.4 + i * 0.2} 0 0.06`);
+        electron.setAttribute('animation', `property: position; from: ${-0.5 + i * 0.1} 0 0.06; to: ${0.5 + i * 0.1} 0 0.06; dur: ${2000 + i * 100}; loop: true`);
+        parent.appendChild(electron);
+      }
+
+      const arrow = document.createElement('a-cone');
+      arrow.setAttribute('position', '0.6 0 0');
+      arrow.setAttribute('rotation', '0 0 -90');
+      arrow.setAttribute('radius-bottom', '0.06');
+      arrow.setAttribute('radius-top', '0');
+      arrow.setAttribute('height', '0.12');
+      arrow.setAttribute('color', '#00ff00');
+      parent.appendChild(arrow);
+    }
+
+    function createResistanceAnimation(parent) {
+      const body = document.createElement('a-box');
+      body.setAttribute('position', '0 0 0');
+      body.setAttribute('width', '0.4');
+      body.setAttribute('height', '0.15');
+      body.setAttribute('depth', '0.15');
+      body.setAttribute('color', '#d4a574');
+      parent.appendChild(body);
+
+      const colors = ['#8B4513', '#000000', '#ff0000', '#ffd700'];
+      for (let i = 0; i < 4; i++) {
+        const band = document.createElement('a-box');
+        band.setAttribute('position', `${-0.12 + i * 0.08} 0 0.076`);
+        band.setAttribute('width', '0.03');
+        band.setAttribute('height', '0.15');
+        band.setAttribute('depth', '0.01');
+        band.setAttribute('color', colors[i]);
+        parent.appendChild(band);
+      }
+
+      const heat = document.createElement('a-sphere');
+      heat.setAttribute('position', '0 0 0');
+      heat.setAttribute('radius', '0.25');
+      heat.setAttribute('color', '#ff4400');
+      heat.setAttribute('material', 'transparent: true; opacity: 0.2; emissive: #ff4400; emissiveIntensity: 0.3');
+      heat.setAttribute('animation', 'property: material.opacity; from: 0.1; to: 0.4; dur: 1000; dir: alternate; loop: true');
+      parent.appendChild(heat);
+    }
+
+    function createVoltageAnimation(parent) {
+      const posTerminal = document.createElement('a-box');
+      posTerminal.setAttribute('position', '-0.35 0 0');
+      posTerminal.setAttribute('width', '0.15');
+      posTerminal.setAttribute('height', '0.3');
+      posTerminal.setAttribute('depth', '0.1');
+      posTerminal.setAttribute('color', '#ff0000');
+      parent.appendChild(posTerminal);
+
+      const plusSign = document.createElement('a-text');
+      plusSign.setAttribute('value', '+');
+      plusSign.setAttribute('position', '-0.35 0 0.06');
+      plusSign.setAttribute('color', '#ffffff');
+      plusSign.setAttribute('align', 'center');
+      plusSign.setAttribute('width', '1');
+      parent.appendChild(plusSign);
+
+      const negTerminal = document.createElement('a-box');
+      negTerminal.setAttribute('position', '0.35 0 0');
+      negTerminal.setAttribute('width', '0.15');
+      negTerminal.setAttribute('height', '0.3');
+      negTerminal.setAttribute('depth', '0.1');
+      negTerminal.setAttribute('color', '#0066ff');
+      parent.appendChild(negTerminal);
+
+      const minusSign = document.createElement('a-text');
+      minusSign.setAttribute('value', '-');
+      minusSign.setAttribute('position', '0.35 0 0.06');
+      minusSign.setAttribute('color', '#ffffff');
+      minusSign.setAttribute('align', 'center');
+      minusSign.setAttribute('width', '1');
+      parent.appendChild(minusSign);
+
+      for (let i = 0; i < 3; i++) {
+        const field = document.createElement('a-box');
+        field.setAttribute('position', `0 ${-0.1 + i * 0.1} 0`);
+        field.setAttribute('width', '0.4');
+        field.setAttribute('height', '0.015');
+        field.setAttribute('depth', '0.015');
+        field.setAttribute('color', '#ffff00');
+        field.setAttribute('material', 'emissive: #ffff00; emissiveIntensity: 0.5');
+        field.setAttribute('animation', `property: material.emissiveIntensity; from: 0.2; to: 1; dur: ${600 + i * 200}; dir: alternate; loop: true`);
+        parent.appendChild(field);
+      }
+
+      const charge = document.createElement('a-sphere');
+      charge.setAttribute('radius', '0.04');
+      charge.setAttribute('color', '#00ff00');
+      charge.setAttribute('material', 'emissive: #00ff00; emissiveIntensity: 1');
+      charge.setAttribute('animation', 'property: position; from: -0.25 0 0.08; to: 0.25 0 0.08; dur: 1500; loop: true');
+      parent.appendChild(charge);
+    }
+
+    function setupMarkerEvents() {
+      const marker = document.getElementById('ar-marker');
+      if (marker) {
+        marker.addEventListener('markerFound', () => {
+          console.log('Özel marker bulundu!');
+          document.getElementById('animation-info').classList.remove('hidden');
+        });
+        marker.addEventListener('markerLost', () => {
+          console.log('Özel marker kaybedildi');
+          document.getElementById('animation-info').classList.add('hidden');
+        });
+      }
+    }
+
+    // Sayfa yüklendiğinde
+    document.addEventListener('DOMContentLoaded', initAR);
+  </script>
+</body>
+</html>

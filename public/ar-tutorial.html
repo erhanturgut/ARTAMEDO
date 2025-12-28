@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AR Animasyon Rehberi - ARTAMEDO</title>
+  <link rel="stylesheet" href="admin.css">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body {
+      background: var(--primary-bg);
+      color: var(--text-light);
+      padding: 40px 20px;
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+    
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    
+    .header h1 {
+      font-size: 2.5rem;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 10px;
+    }
+    
+    .header p {
+      color: var(--text-muted);
+      font-size: 1.1rem;
+    }
+    
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--accent-blue);
+      text-decoration: none;
+      margin-bottom: 30px;
+      font-weight: 500;
+      transition: color 0.3s ease;
+    }
+    
+    .back-btn:hover {
+      color: var(--accent-purple);
+    }
+    
+    .section {
+      background: var(--secondary-bg);
+      border-radius: 16px;
+      padding: 30px;
+      margin-bottom: 30px;
+      border: 1px solid var(--border-color);
+    }
+    
+    .section h2 {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 1.5rem;
+      margin-bottom: 20px;
+      color: var(--text-light);
+    }
+    
+    .section h2 svg {
+      width: 28px;
+      height: 28px;
+      color: var(--accent-blue);
+    }
+    
+    .section h3 {
+      font-size: 1.2rem;
+      margin: 25px 0 15px;
+      color: var(--accent-purple);
+    }
+    
+    .section p {
+      line-height: 1.7;
+      margin-bottom: 15px;
+      color: var(--text-muted);
+    }
+    
+    .code-block {
+      background: #1a1a2e;
+      border-radius: 12px;
+      padding: 20px;
+      margin: 15px 0;
+      overflow-x: auto;
+    }
+    
+    .code-block pre {
+      margin: 0;
+      color: #e0e0e0;
+      font-family: 'Monaco', 'Consolas', monospace;
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+    
+    .code-block .tag {
+      color: #ff79c6;
+    }
+    
+    .code-block .attr {
+      color: #50fa7b;
+    }
+    
+    .code-block .value {
+      color: #f1fa8c;
+    }
+    
+    .code-block .comment {
+      color: #6272a4;
+    }
+    
+    .primitive-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+      margin: 20px 0;
+    }
+    
+    .primitive-card {
+      background: var(--primary-bg);
+      border-radius: 12px;
+      padding: 20px;
+      border: 1px solid var(--border-color);
+    }
+    
+    .primitive-card h4 {
+      color: var(--accent-blue);
+      margin-bottom: 10px;
+      font-size: 1.1rem;
+    }
+    
+    .primitive-card code {
+      display: block;
+      background: #1a1a2e;
+      color: #00ff88;
+      padding: 10px 15px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      margin-bottom: 10px;
+    }
+    
+    .primitive-card p {
+      font-size: 0.9rem;
+      margin: 0;
+    }
+    
+    .animation-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+    }
+    
+    .animation-table th,
+    .animation-table td {
+      padding: 12px 15px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+    
+    .animation-table th {
+      background: var(--primary-bg);
+      color: var(--text-light);
+      font-weight: 600;
+    }
+    
+    .animation-table td {
+      color: var(--text-muted);
+    }
+    
+    .animation-table code {
+      color: #00d4ff;
+      background: rgba(0, 212, 255, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+    }
+    
+    .tip-box {
+      background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(155, 89, 182, 0.1));
+      border-left: 4px solid var(--accent-blue);
+      border-radius: 0 12px 12px 0;
+      padding: 20px;
+      margin: 20px 0;
+    }
+    
+    .tip-box h4 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--accent-blue);
+      margin-bottom: 10px;
+    }
+    
+    .tip-box p {
+      margin: 0;
+    }
+    
+    .example-section {
+      margin: 30px 0;
+    }
+    
+    .example-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1.1rem;
+      color: var(--accent-purple);
+      margin-bottom: 15px;
+    }
+    
+    .color-palette {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 15px 0;
+    }
+    
+    .color-swatch {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--primary-bg);
+      padding: 8px 12px;
+      border-radius: 8px;
+    }
+    
+    .color-swatch span:first-child {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+    }
+    
+    .color-swatch code {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <a href="/admin.html#add-question" class="back-btn">
+    <i data-lucide="arrow-left"></i>
+    Admin Paneline Dön
+  </a>
+  
+  <div class="header">
+    <h1>🎮 AR Animasyon Rehberi</h1>
+    <p>A-Frame ile kendi 3D animasyonlarınızı oluşturun</p>
+  </div>
+  
+  <!-- Temel Kavramlar -->
+  <div class="section">
+    <h2><i data-lucide="book-open"></i> Temel Kavramlar</h2>
+    <p>A-Frame, web tabanlı 3D ve VR/AR deneyimleri oluşturmak için kullanılan bir HTML çerçevesidir. Basit HTML etiketleri ile 3D nesneler ve animasyonlar oluşturabilirsiniz.</p>
+    
+    <h3>Koordinat Sistemi</h3>
+    <p>A-Frame, sağ el koordinat sistemini kullanır:</p>
+    <ul>
+      <li><strong>X ekseni:</strong> Sağ (+) / Sol (-)</li>
+      <li><strong>Y ekseni:</strong> Yukarı (+) / Aşağı (-)</li>
+      <li><strong>Z ekseni:</strong> Önde (+) / Arkada (-)</li>
+    </ul>
+    
+    <div class="tip-box">
+      <h4><i data-lucide="lightbulb"></i> İpucu</h4>
+      <p>Marker üzerinde görünmesi için nesnelerin Y değerini 0'dan büyük yapın (örn: position="0 0.5 0").</p>
+    </div>
+  </div>
+  
+  <!-- Temel Şekiller -->
+  <div class="section">
+    <h2><i data-lucide="shapes"></i> Temel Şekiller (Primitives)</h2>
+    <p>A-Frame'de kullanabileceğiniz hazır 3D şekiller:</p>
+    
+    <div class="primitive-grid">
+      <div class="primitive-card">
+        <h4>📦 Kutu (Box)</h4>
+        <code>&lt;a-box position="0 0.5 0" color="#4CC3D9"&gt;&lt;/a-box&gt;</code>
+        <p>width, height, depth ile boyutlandırılır</p>
+      </div>
+      
+      <div class="primitive-card">
+        <h4>🔵 Küre (Sphere)</h4>
+        <code>&lt;a-sphere position="0 0.5 0" radius="0.5" color="#EF2D5E"&gt;&lt;/a-sphere&gt;</code>
+        <p>radius ile boyutlandırılır</p>
+      </div>
+      
+      <div class="primitive-card">
+        <h4>🛢️ Silindir (Cylinder)</h4>
+        <code>&lt;a-cylinder position="0 0.5 0" radius="0.3" height="1" color="#FFC65D"&gt;&lt;/a-cylinder&gt;</code>
+        <p>radius ve height ile boyutlandırılır</p>
+      </div>
+      
+      <div class="primitive-card">
+        <h4>🔺 Koni (Cone)</h4>
+        <code>&lt;a-cone position="0 0.5 0" radius-bottom="0.5" height="1" color="#7BC8A4"&gt;&lt;/a-cone&gt;</code>
+        <p>radius-bottom ve height ile boyutlandırılır</p>
+      </div>
+      
+      <div class="primitive-card">
+        <h4>🍩 Halka (Torus)</h4>
+        <code>&lt;a-torus position="0 0.5 0" radius="0.4" radius-tubular="0.1" color="#9B59B6"&gt;&lt;/a-torus&gt;</code>
+        <p>radius ve radius-tubular ile boyutlandırılır</p>
+      </div>
+      
+      <div class="primitive-card">
+        <h4>✏️ Metin (Text)</h4>
+        <code>&lt;a-text value="Merhaba" position="0 0.5 0" color="white"&gt;&lt;/a-text&gt;</code>
+        <p>value, scale, align ile özelleştirilir</p>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Animasyonlar -->
+  <div class="section">
+    <h2><i data-lucide="play"></i> Animasyonlar</h2>
+    <p>Nesnelere animasyon eklemek için <code>animation</code> özelliğini kullanın:</p>
+    
+    <div class="code-block">
+      <pre><span class="tag">&lt;a-box</span> <span class="attr">position</span>=<span class="value">"0 0.5 0"</span> <span class="attr">color</span>=<span class="value">"#4CC3D9"</span>
+  <span class="attr">animation</span>=<span class="value">"property: rotation; to: 0 360 0; dur: 2000; loop: true"</span><span class="tag">&gt;&lt;/a-box&gt;</span></pre>
+    </div>
+    
+    <h3>Animasyon Özellikleri</h3>
+    <table class="animation-table">
+      <thead>
+        <tr>
+          <th>Özellik</th>
+          <th>Açıklama</th>
+          <th>Örnek</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>property</code></td>
+          <td>Hangi özelliğin animasyonlu olacağı</td>
+          <td>rotation, position, scale, material.color</td>
+        </tr>
+        <tr>
+          <td><code>from</code></td>
+          <td>Başlangıç değeri (opsiyonel)</td>
+          <td>0 0 0</td>
+        </tr>
+        <tr>
+          <td><code>to</code></td>
+          <td>Bitiş değeri</td>
+          <td>0 360 0</td>
+        </tr>
+        <tr>
+          <td><code>dur</code></td>
+          <td>Süre (milisaniye)</td>
+          <td>2000 (2 saniye)</td>
+        </tr>
+        <tr>
+          <td><code>loop</code></td>
+          <td>Tekrar</td>
+          <td>true, false, 3 (sayı)</td>
+        </tr>
+        <tr>
+          <td><code>dir</code></td>
+          <td>Yön</td>
+          <td>normal, reverse, alternate</td>
+        </tr>
+        <tr>
+          <td><code>easing</code></td>
+          <td>Geçiş efekti</td>
+          <td>linear, easeInOut, easeOutElastic</td>
+        </tr>
+        <tr>
+          <td><code>delay</code></td>
+          <td>Gecikme (ms)</td>
+          <td>500</td>
+        </tr>
+      </tbody>
+    </table>
+    
+    <h3>Çoklu Animasyon</h3>
+    <p>Bir nesneye birden fazla animasyon eklemek için <code>animation__isim</code> formatını kullanın:</p>
+    
+    <div class="code-block">
+      <pre><span class="tag">&lt;a-sphere</span> <span class="attr">position</span>=<span class="value">"0 1 0"</span> <span class="attr">color</span>=<span class="value">"#EF2D5E"</span>
+  <span class="attr">animation</span>=<span class="value">"property: position; to: 0 2 0; dur: 1000; dir: alternate; loop: true"</span>
+  <span class="attr">animation__rotate</span>=<span class="value">"property: rotation; to: 0 360 0; dur: 2000; loop: true"</span>
+  <span class="attr">animation__color</span>=<span class="value">"property: material.color; to: #00ff88; dur: 1500; dir: alternate; loop: true"</span><span class="tag">&gt;&lt;/a-sphere&gt;</span></pre>
+    </div>
+  </div>
+  
+  <!-- Örnek Animasyonlar -->
+  <div class="section">
+    <h2><i data-lucide="sparkles"></i> Örnek Animasyonlar</h2>
+    
+    <div class="example-section">
+      <div class="example-title">
+        <i data-lucide="rotate-3d"></i>
+        Dönen Küp
+      </div>
+      <div class="code-block">
+        <pre><span class="tag">&lt;a-box</span> <span class="attr">position</span>=<span class="value">"0 0.5 0"</span> <span class="attr">color</span>=<span class="value">"#4CC3D9"</span>
+  <span class="attr">animation</span>=<span class="value">"property: rotation; to: 360 360 0; dur: 3000; loop: true; easing: linear"</span><span class="tag">&gt;&lt;/a-box&gt;</span></pre>
+      </div>
+    </div>
+    
+    <div class="example-section">
+      <div class="example-title">
+        <i data-lucide="move-vertical"></i>
+        Zıplayan Top
+      </div>
+      <div class="code-block">
+        <pre><span class="tag">&lt;a-sphere</span> <span class="attr">position</span>=<span class="value">"0 0.5 0"</span> <span class="attr">radius</span>=<span class="value">"0.3"</span> <span class="attr">color</span>=<span class="value">"#EF2D5E"</span>
+  <span class="attr">animation</span>=<span class="value">"property: position; from: 0 0.3 0; to: 0 1.5 0; dur: 800; dir: alternate; loop: true; easing: easeOutQuad"</span><span class="tag">&gt;&lt;/a-sphere&gt;</span></pre>
+      </div>
+    </div>
+    
+    <div class="example-section">
+      <div class="example-title">
+        <i data-lucide="lightbulb"></i>
+        Yanıp Sönen Işık
+      </div>
+      <div class="code-block">
+        <pre><span class="tag">&lt;a-sphere</span> <span class="attr">position</span>=<span class="value">"0 0.5 0"</span> <span class="attr">radius</span>=<span class="value">"0.3"</span> <span class="attr">color</span>=<span class="value">"#ffeb3b"</span>
+  <span class="attr">animation</span>=<span class="value">"property: material.opacity; from: 0.3; to: 1; dur: 500; dir: alternate; loop: true"</span><span class="tag">&gt;
+  &lt;a-light</span> <span class="attr">type</span>=<span class="value">"point"</span> <span class="attr">color</span>=<span class="value">"#ffeb3b"</span>
+    <span class="attr">animation</span>=<span class="value">"property: intensity; from: 0; to: 2; dur: 500; dir: alternate; loop: true"</span><span class="tag">&gt;&lt;/a-light&gt;
+&lt;/a-sphere&gt;</span></pre>
+      </div>
+    </div>
+    
+    <div class="example-section">
+      <div class="example-title">
+        <i data-lucide="arrow-right"></i>
+        Hareket Eden Partikül
+      </div>
+      <div class="code-block">
+        <pre><span class="tag">&lt;a-sphere</span> <span class="attr">position</span>=<span class="value">"-1 0.2 0"</span> <span class="attr">radius</span>=<span class="value">"0.05"</span> <span class="attr">color</span>=<span class="value">"#00ff88"</span>
+  <span class="attr">animation</span>=<span class="value">"property: position; from: -1 0.2 0; to: 1 0.2 0; dur: 2000; loop: true"</span><span class="tag">&gt;&lt;/a-sphere&gt;</span></pre>
+      </div>
+    </div>
+    
+    <div class="example-section">
+      <div class="example-title">
+        <i data-lucide="maximize-2"></i>
+        Büyüyüp Küçülen Nesne
+      </div>
+      <div class="code-block">
+        <pre><span class="tag">&lt;a-box</span> <span class="attr">position</span>=<span class="value">"0 0.5 0"</span> <span class="attr">color</span>=<span class="value">"#9B59B6"</span>
+  <span class="attr">animation</span>=<span class="value">"property: scale; from: 0.5 0.5 0.5; to: 1 1 1; dur: 1000; dir: alternate; loop: true"</span><span class="tag">&gt;&lt;/a-box&gt;</span></pre>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Elektrik Devresi Örneği -->
+  <div class="section">
+    <h2><i data-lucide="zap"></i> Elektrik Devresi Örneği</h2>
+    <p>Basit bir elektrik devresi animasyonu:</p>
+    
+    <div class="code-block">
+      <pre><span class="comment">&lt;!-- Pil --&gt;</span>
+<span class="tag">&lt;a-cylinder</span> <span class="attr">position</span>=<span class="value">"-0.5 0.15 0"</span> <span class="attr">radius</span>=<span class="value">"0.08"</span> <span class="attr">height</span>=<span class="value">"0.2"</span> <span class="attr">color</span>=<span class="value">"#ff6b6b"</span><span class="tag">&gt;&lt;/a-cylinder&gt;</span>
+<span class="tag">&lt;a-text</span> <span class="attr">value</span>=<span class="value">"+"</span> <span class="attr">position</span>=<span class="value">"-0.5 0.3 0"</span> <span class="attr">scale</span>=<span class="value">"0.3 0.3 0.3"</span> <span class="attr">color</span>=<span class="value">"white"</span> <span class="attr">align</span>=<span class="value">"center"</span><span class="tag">&gt;&lt;/a-text&gt;</span>
+
+<span class="comment">&lt;!-- Kablo --&gt;</span>
+<span class="tag">&lt;a-box</span> <span class="attr">position</span>=<span class="value">"0 0.1 0"</span> <span class="attr">width</span>=<span class="value">"1"</span> <span class="attr">height</span>=<span class="value">"0.02"</span> <span class="attr">depth</span>=<span class="value">"0.02"</span> <span class="attr">color</span>=<span class="value">"#00d4ff"</span><span class="tag">&gt;&lt;/a-box&gt;</span>
+
+<span class="comment">&lt;!-- Ampul --&gt;</span>
+<span class="tag">&lt;a-sphere</span> <span class="attr">position</span>=<span class="value">"0.5 0.2 0"</span> <span class="attr">radius</span>=<span class="value">"0.1"</span> <span class="attr">color</span>=<span class="value">"#ffeb3b"</span>
+  <span class="attr">animation</span>=<span class="value">"property: material.emissiveIntensity; from: 0; to: 1; dur: 800; dir: alternate; loop: true"</span><span class="tag">&gt;&lt;/a-sphere&gt;</span>
+
+<span class="comment">&lt;!-- Akım partikülleri --&gt;</span>
+<span class="tag">&lt;a-sphere</span> <span class="attr">radius</span>=<span class="value">"0.02"</span> <span class="attr">color</span>=<span class="value">"#00ff88"</span>
+  <span class="attr">animation</span>=<span class="value">"property: position; from: -0.5 0.1 0; to: 0.5 0.1 0; dur: 1500; loop: true"</span><span class="tag">&gt;&lt;/a-sphere&gt;</span></pre>
+    </div>
+  </div>
+  
+  <!-- Renkler -->
+  <div class="section">
+    <h2><i data-lucide="palette"></i> Önerilen Renkler</h2>
+    <p>AR'da iyi görünen renkler:</p>
+    
+    <div class="color-palette">
+      <div class="color-swatch">
+        <span style="background: #ff6b6b;"></span>
+        <code>#ff6b6b</code>
+      </div>
+      <div class="color-swatch">
+        <span style="background: #4ecdc4;"></span>
+        <code>#4ecdc4</code>
+      </div>
+      <div class="color-swatch">
+        <span style="background: #00d4ff;"></span>
+        <code>#00d4ff</code>
+      </div>
+      <div class="color-swatch">
+        <span style="background: #00ff88;"></span>
+        <code>#00ff88</code>
+      </div>
+      <div class="color-swatch">
+        <span style="background: #ffeb3b;"></span>
+        <code>#ffeb3b</code>
+      </div>
+      <div class="color-swatch">
+        <span style="background: #9b59b6;"></span>
+        <code>#9b59b6</code>
+      </div>
+      <div class="color-swatch">
+        <span style="background: #ff9800;"></span>
+        <code>#ff9800</code>
+      </div>
+      <div class="color-swatch">
+        <span style="background: #e91e63;"></span>
+        <code>#e91e63</code>
+      </div>
+    </div>
+  </div>
+  
+  <!-- İpuçları -->
+  <div class="section">
+    <h2><i data-lucide="info"></i> İpuçları</h2>
+    
+    <div class="tip-box">
+      <h4><i data-lucide="lightbulb"></i> Boyut</h4>
+      <p>Nesneleri çok büyük yapmayın. 0.1 - 1 birim arası en iyi görünür.</p>
+    </div>
+    
+    <div class="tip-box">
+      <h4><i data-lucide="lightbulb"></i> Konum</h4>
+      <p>Nesneleri Y=0 seviyesinin üstüne yerleştirin (örn: Y=0.5), böylece marker'ın üzerinde görünürler.</p>
+    </div>
+    
+    <div class="tip-box">
+      <h4><i data-lucide="lightbulb"></i> Animasyon Hızı</h4>
+      <p>Çok hızlı animasyonlar göz yorar. 1000-3000ms arası ideal.</p>
+    </div>
+    
+    <div class="tip-box">
+      <h4><i data-lucide="lightbulb"></i> Test</h4>
+      <p>Animasyonlarınızı önce <a href="https://aframe.io/aframe-inspector/example/" target="_blank">A-Frame Inspector</a>'da test edin.</p>
+    </div>
+  </div>
+  
+  <script>
+    // Initialize Lucide icons
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
+  </script>
+</body>
+</html>
