@@ -1,11 +1,69 @@
 // Game State
 let TOTAL_STEPS = 24; // Varsayılan değer, sunucudan güncellenecek
 
+// Ses Yöneticisi
+let soundManager = null;
+
+// Socket.io
+let socket = null;
+
+// DOM Elements (en başta deklarasyon - Temporal Dead Zone sorununu çözmek için)
+let playerNamesContainer = null;
+let mainMenu = null;
+let gameScreen = null;
+let resultsScreen = null;
+let startGameBtn = null;
+let currentPlayerBadge = null;
+let scoreDisplay = null;
+let qrContainer = null;
+let questionCard = null;
+let resultIndicator = null;
+let manualQrModal = null;
+let manualQrInput = null;
+
+// Initialize DOM Elements
+function initDOMElements() {
+  playerNamesContainer = document.getElementById('player-names');
+  mainMenu = document.getElementById('main-menu');
+  gameScreen = document.getElementById('game-screen');
+  resultsScreen = document.getElementById('results-screen');
+  startGameBtn = document.getElementById('start-game-btn');
+  currentPlayerBadge = document.getElementById('current-player-badge');
+  scoreDisplay = document.getElementById('score-display');
+  qrContainer = document.getElementById('qr-container');
+  questionCard = document.getElementById('question-card');
+  resultIndicator = document.getElementById('result-indicator');
+  manualQrModal = document.getElementById('manual-qr-modal');
+  manualQrInput = document.getElementById('manual-qr-input');
+  
+  // Socket.io'yu başlat - WebSocket + polling fallback
+  socket = io({
+    transports: ['websocket', 'polling'],
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    reconnectionAttempts: 10
+  });
+}
+
 // Initialize Lucide icons
 document.addEventListener('DOMContentLoaded', () => {
+  console.log('DOM Content Loaded - Başlatılıyor...');
+  
+  // DOM Elements'ı başlat
+  initDOMElements();
+  
   if (typeof lucide !== 'undefined') {
     lucide.createIcons();
   }
+  
+  // Ses yöneticisini başlat
+  initSoundManager();
+  
+  // Oyuncu seçimi butonları ve diğer event listener'ları kur
+  setupPlayerSelection();
+  setupGameEventListeners();
+  setupSocketListeners();
   
   // Fullscreen button setup
   setupFullscreen();
@@ -139,7 +197,8 @@ let gameState = {
   selectedQuestionType: null, // Seçilen soru tipi
   timerInterval: null, // Süre sayacı
   duelPlayers: [], // Kapışma modundaki oyuncular
-  duelAnswers: {} // Kapışma cevapları
+  duelAnswers: {}, // Kapışma cevapları
+  duelOpponent: undefined // Duel'de seçilen rakip oyuncu index'i
 };
 
 // Soru tipi isimleri
@@ -148,13 +207,30 @@ const QUESTION_TYPE_NAMES = {
   truefalse: 'Doğru/Yanlış',
   fillblank: 'Boşluk Doldurma',
   duel: 'Kapışma 2\'li',
-  battle: 'Kapışma Birlikte',
+  group_duel: 'Kapışma Hep Birlikte',
   matching: 'Eşleme',
   drag_drop: 'Sürükle Bırak',
   application: 'Uygulama'
 };
 
-const socket = io();
+function getQuestionMode(question) {
+  if (!question) return 'normal';
+  if (question.mode) {
+    return question.mode === 'battle' ? 'group_duel' : question.mode;
+  }
+  if (question.type === 'duel' || question.type === 'group_duel' || question.type === 'battle') {
+    return question.type === 'battle' ? 'group_duel' : question.type;
+  }
+  return 'normal';
+}
+
+function getQuestionBaseType(question) {
+  if (!question) return 'multiple';
+  if (question.base_type) return question.base_type;
+  const mode = getQuestionMode(question);
+  if (mode !== 'normal') return 'application';
+  return question.type || 'multiple';
+}
 
 // Load game settings from server
 async function loadGameSettings() {
@@ -170,37 +246,53 @@ async function loadGameSettings() {
 // Load settings on page load
 loadGameSettings();
 
-// DOM Elements
-const mainMenu = document.getElementById('main-menu');
-const gameScreen = document.getElementById('game-screen');
-const resultsScreen = document.getElementById('results-screen');
-const playerNamesContainer = document.getElementById('player-names');
-const startGameBtn = document.getElementById('start-game-btn');
-const currentPlayerBadge = document.getElementById('current-player-badge');
-const scoreDisplay = document.getElementById('score-display');
-const qrContainer = document.getElementById('qr-container');
-const questionCard = document.getElementById('question-card');
-const resultIndicator = document.getElementById('result-indicator');
-const manualQrModal = document.getElementById('manual-qr-modal');
-const manualQrInput = document.getElementById('manual-qr-input');
-
 // QR Scanner
 let html5QrCode = null;
 let isScanning = false;
 let lastScannedCode = null;
 let lastScanTime = 0;
 
-// Player Selection
-document.querySelectorAll('.player-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.player-btn').forEach(b => b.classList.remove('selected'));
-    btn.classList.add('selected');
-    gameState.playerCount = parseInt(btn.dataset.count);
-    showPlayerNameInputs();
+// Player Selection Setup
+function setupPlayerSelection() {
+  console.log('setupPlayerSelection çağrıldı');
+  
+  const playerBtns = document.querySelectorAll('.player-btn');
+  console.log('Player seçim butonları bulundu:', playerBtns.length);
+  
+  if (playerBtns.length === 0) {
+    console.error('Player butonları bulunamadı!');
+    // Tekrar dene
+    setTimeout(() => {
+      console.log('Player butonları için tekrar deneniyor...');
+      const retryBtns = document.querySelectorAll('.player-btn');
+      if (retryBtns.length > 0) {
+        setupPlayerSelectionButtons(retryBtns);
+      }
+    }, 500);
+    return;
+  }
+  
+  setupPlayerSelectionButtons(playerBtns);
+}
+
+function setupPlayerSelectionButtons(playerBtns) {
+  console.log('Setting up', playerBtns.length, 'player buttons');
+  
+  playerBtns.forEach(btn => {
+    btn.addEventListener('click', function() {
+      const count = this.dataset.count;
+      console.log('Oyuncu sayısı seçildi:', count);
+      
+      document.querySelectorAll('.player-btn').forEach(b => b.classList.remove('selected'));
+      this.classList.add('selected');
+      gameState.playerCount = parseInt(count);
+      showPlayerNameInputs();
+    });
   });
-});
+}
 
 function showPlayerNameInputs() {
+  console.log('Showing name inputs for', gameState.playerCount, 'players');
   playerNamesContainer.innerHTML = '';
   playerNamesContainer.classList.remove('hidden');
   
@@ -271,47 +363,59 @@ function validateColorSelections() {
   return !hasDuplicate;
 }
 
-// Start Game
-startGameBtn.addEventListener('click', async () => {
-  // Validate colors first
-  if (!validateColorSelections()) {
-    alert('Her oyuncu farklı bir renk seçmelidir!');
-    return;
-  }
-  
-  // Butonu hemen gizle (çift tıklama önleme)
-  startGameBtn.classList.add('hidden');
-  
-  const inputs = document.querySelectorAll('.player-name-input input');
-  const colorSelects = document.querySelectorAll('.player-color-select');
-  gameState.players = [];
-  
-  inputs.forEach((input, index) => {
-    const colorKey = colorSelects[index].value;
-    gameState.players.push({
-      name: input.value || `Oyuncu ${index + 1}`,
-      colorKey: colorKey,
-      color: PLAYER_COLORS[colorKey]
+// Setup Game Event Listeners
+function setupGameEventListeners() {
+  // Start Game
+  startGameBtn.addEventListener('click', async () => {
+    console.log('Start game button clicked!');
+    console.log('Player count:', gameState.playerCount);
+    console.log('Players:', gameState.players);
+    
+    // Validate colors first
+    if (!validateColorSelections()) {
+      alert('Her oyuncu farklı bir renk seçmelidir!');
+      return;
+    }
+    
+    // Oyun başlangıç sesi
+    playSound('game_start');
+    
+    // Butonu hemen gizle (çift tıklama önleme)
+    startGameBtn.classList.add('hidden');
+    
+    const inputs = document.querySelectorAll('.player-name-input input');
+    const colorSelects = document.querySelectorAll('.player-color-select');
+    gameState.players = [];
+    
+    inputs.forEach((input, index) => {
+      const colorKey = colorSelects[index].value;
+      gameState.players.push({
+        name: input.value || `Oyuncu ${index + 1}`,
+        colorKey: colorKey,
+        color: PLAYER_COLORS[colorKey]
+      });
+      gameState.scores[index] = 0;
     });
-    gameState.scores[index] = 0;
+    
+    // Rastgele oyun sırası belirle
+    gameState.playerOrder = shuffleArray([...Array(gameState.playerCount).keys()]);
+    gameState.currentPlayerIndex = 0;
+    
+    // Show turn order with animation (oyuncu butona basınca devam edecek)
+    showTurnOrder();
   });
-  
-  // Rastgele oyun sırası belirle
-  gameState.playerOrder = shuffleArray([...Array(gameState.playerCount).keys()]);
-  gameState.currentPlayerIndex = 0;
-  
-  // Show turn order with animation (oyuncu butona basınca devam edecek)
-  showTurnOrder();
-});
 
-// Oyun sırası gösterildikten sonra "Oyuna Başla" butonuna tıklayınca
-document.getElementById('confirm-start-btn').addEventListener('click', async () => {
-  // Butonu devre dışı bırak
-  const confirmBtn = document.getElementById('confirm-start-btn');
-  confirmBtn.disabled = true;
-  confirmBtn.textContent = 'Başlatılıyor...';
-  
-  // Create game in database
+  // Oyun sırası gösterildikten sonra "Oyuna Başla" butonuna tıklayınca
+  document.getElementById('confirm-start-btn').addEventListener('click', async () => {
+    console.log('Confirm start button clicked!');
+    console.log('Game ID will be created for:', gameState.playerCount, 'players');
+    
+    // Butonu devre dışı bırak
+    const confirmBtn = document.getElementById('confirm-start-btn');
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Başlatılıyor...';
+    
+    // Create game in database
   const response = await fetch('/api/games', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -332,7 +436,8 @@ document.getElementById('confirm-start-btn').addEventListener('click', async () 
   updateGameUI();
   // Doğrudan QR tarama ekranına geç
   showQRScanner();
-});
+  });
+}
 
 // Shuffle array (Fisher-Yates)
 function shuffleArray(array) {
@@ -585,6 +690,9 @@ async function onQRCodeScanned(qrCode) {
   lastScannedCode = qrCode;
   lastScanTime = now;
   
+  // QR tarama sesi
+  playSound('qr_scan');
+  
   stopQRScanner();
   await loadQuestion(qrCode);
 }
@@ -671,6 +779,9 @@ document.getElementById('qr-not-found-ok-btn').addEventListener('click', hideQRN
 function displayQuestion(question) {
   qrContainer.classList.add('hidden');
   
+  // Soru belirir sesi
+  playSound('question_appear');
+  
   // Show question wrapper with progress border
   const questionWrapper = document.getElementById('question-wrapper');
   questionWrapper.classList.remove('hidden');
@@ -678,27 +789,34 @@ function displayQuestion(question) {
   // Update progress border
   updateProgressBorder();
   
-  // Get image from localStorage if it's a key
-  // Get image - check if it's base64 or localStorage key (legacy support)
+  // Get image - check image_url or application check image (base64 or legacy localStorage key)
   let imageHtml = '';
-  if (question.image_url) {
-    let imageSrc = question.image_url;
-    
+  const rawImage = question.image_url || question.application?.checkImage || null;
+  if (rawImage) {
+    let imageSrc = rawImage;
+
     // Legacy support: if it's a localStorage key, try to get from localStorage
-    if (question.image_url.startsWith('quiz_image_')) {
-      const imageData = localStorage.getItem(question.image_url);
+    if (typeof rawImage === 'string' && rawImage.startsWith('quiz_image_')) {
+      const imageData = localStorage.getItem(rawImage);
       if (imageData) {
         imageSrc = imageData;
       } else {
         imageSrc = null; // Image not found in localStorage
       }
     }
-    
+
     if (imageSrc) {
       imageHtml = `<img src="${imageSrc}" class="question-image" alt="Soru görseli">`;
     }
   }
   
+  const questionHeaderHtml = `
+    <div class="question-header">
+      ${imageHtml}
+      <p class="question-text">${question.question_text}</p>
+    </div>
+  `;
+
   // Timer HTML if time_limit is set
   let timerHtml = '';
   if (question.time_limit && question.time_limit > 0) {
@@ -714,197 +832,316 @@ function displayQuestion(question) {
       </div>
     `;
   }
-  
-  let html = timerHtml + `
-    <div class="question-header">
-      ${imageHtml}
-      <p class="question-text">${question.question_text}</p>
-    </div>`;
-  
-  if (question.type === 'multiple') {
-    html += `<div class="answer-options">`;
-    const letters = ['A', 'B', 'C', 'D'];
-    question.options.forEach((option, index) => {
-      html += `
-        <button class="option-btn" data-answer="${letters[index]}">
-          <span class="option-letter">${letters[index]}</span>
-          <span>${option}</span>
-        </button>
-      `;
-    });
-    html += `</div>`;
-  } else if (question.type === 'truefalse') {
-    html += `
-      <div class="true-false-options">
-        <button class="tf-btn true-btn" data-answer="true">
-          <span class="tf-icon">✓</span>
-          <span>Doğru</span>
-        </button>
-        <button class="tf-btn false-btn" data-answer="false">
-          <span class="tf-icon">✗</span>
-          <span>Yanlış</span>
-        </button>
-      </div>
-    `;
-  } else if (question.type === 'fillblank') {
-    // fill_blanks null check
-    if (!question.fill_blanks || !question.fill_blanks.answers || !question.fill_blanks.options) {
-      html += `<div class="error-message">Bu soru için veri eksik. Lütfen soruyu düzenleyin.</div>`;
-    } else {
-      html += `<div class="fill-blank-container">`;
-      
-      // Parse question with blanks
-      let questionWithBlanks = question.question_text;
-      const blanks = question.fill_blanks.answers;
-      
-      blanks.forEach((blank, index) => {
-        questionWithBlanks = questionWithBlanks.replace('___', `<span class="blank-slot" data-index="${index}"></span>`);
-      });
-      
-      html += `<div class="fill-blank-question">${questionWithBlanks}</div>`;
-      html += `<div class="draggable-options">`;
-      
-      // Shuffle options
-      const shuffledOptions = [...question.fill_blanks.options].sort(() => Math.random() - 0.5);
-      shuffledOptions.forEach(option => {
-        html += `<div class="draggable-word" draggable="true" data-word="${option}">${option}</div>`;
-      });
-      
-      html += `</div>`;
-      html += `<button class="btn-primary submit-answer-btn" id="submit-fill-blank">Cevabı Kontrol Et</button>`;
-      html += `</div>`;
-    }
-  } else if (question.type === 'duel') {
-    // Duel mode - 2 players compete
-    html += `
-      <div class="duel-container">
-        <div class="duel-header">
-          <span class="duel-icon">⚔️</span>
-          <span>KAPIŞMA - 2 Kişi</span>
-        </div>
-        <div class="duel-players">
-          <div class="duel-player" id="duel-player-1">
-            <div class="duel-player-name">Oyuncu 1</div>
-            <button class="duel-buzzer" data-player="1">
-              <span class="buzzer-icon">🔔</span>
-              <span>BAS!</span>
-            </button>
-          </div>
-          <div class="duel-vs">VS</div>
-          <div class="duel-player" id="duel-player-2">
-            <div class="duel-player-name">Oyuncu 2</div>
-            <button class="duel-buzzer" data-player="2">
-              <span class="buzzer-icon">🔔</span>
-              <span>BAS!</span>
-            </button>
-          </div>
-        </div>
-        <div class="duel-answer-section hidden" id="duel-answer-section">
-          <p class="duel-winner-text" id="duel-winner-text"></p>
-          <div class="answer-options duel-options">`;
-    const letters = ['A', 'B', 'C', 'D'];
-    if (question.options) {
+
+  const mode = getQuestionMode(question);
+  const baseType = getQuestionBaseType(question);
+
+  const buildBaseQuestionHtml = () => {
+    const questionHeaderText = baseType === 'fillblank'
+      ? ''
+      : `<p class="question-text">${question.question_text}</p>`;
+
+    let baseHtml = `
+      <div class="question-header">
+        ${imageHtml}
+        ${questionHeaderText}
+      </div>`;
+
+    if (baseType === 'multiple') {
+      baseHtml += `<div class="answer-options">`;
+      const letters = ['A', 'B', 'C', 'D'];
       question.options.forEach((option, index) => {
-        html += `
+        baseHtml += `
           <button class="option-btn" data-answer="${letters[index]}">
             <span class="option-letter">${letters[index]}</span>
             <span>${option}</span>
           </button>
         `;
       });
-    }
-    html += `</div>
-        </div>
-      </div>
-    `;
-  } else if (question.type === 'group_duel') {
-    // Group duel - all players compete together
-    html += `
-      <div class="group-duel-container">
-        <div class="duel-header">
-          <span class="duel-icon">👥</span>
-          <span>KAPIŞMA - Hep Birlikte</span>
-        </div>
-        <div class="group-players" id="group-players">
-          <!-- Players will be added dynamically -->
-        </div>
-        <div class="group-answer-section hidden" id="group-answer-section">
-          <p class="group-winner-text" id="group-winner-text"></p>
-          <div class="answer-options group-options">`;
-    const letters2 = ['A', 'B', 'C', 'D'];
-    if (question.options) {
-      question.options.forEach((option, index) => {
-        html += `
-          <button class="option-btn" data-answer="${letters2[index]}">
-            <span class="option-letter">${letters2[index]}</span>
-            <span>${option}</span>
+      baseHtml += `</div>`;
+    } else if (baseType === 'truefalse') {
+      baseHtml += `
+        <div class="true-false-options">
+          <button class="tf-btn true-btn" data-answer="true">
+            <span class="tf-icon">✓</span>
+            <span>Doğru</span>
           </button>
-        `;
-      });
+          <button class="tf-btn false-btn" data-answer="false">
+            <span class="tf-icon">✗</span>
+            <span>Yanlış</span>
+          </button>
+        </div>
+      `;
+    } else if (baseType === 'fillblank') {
+      // fill_blanks null check
+      if (!question.fill_blanks || !question.fill_blanks.answers || !question.fill_blanks.options) {
+        baseHtml += `<div class="error-message">Bu soru için veri eksik. Lütfen soruyu düzenleyin.</div>`;
+      } else {
+        baseHtml += `<div class="fill-blank-container">`;
+        
+        // Parse question with blanks
+        let questionWithBlanks = question.question_text;
+        const blanks = question.fill_blanks.answers;
+        
+        blanks.forEach((blank, index) => {
+          questionWithBlanks = questionWithBlanks.replace('___', `<span class="blank-slot" data-index="${index}"></span>`);
+        });
+        
+        baseHtml += `<div class="fill-blank-question">${questionWithBlanks}</div>`;
+        baseHtml += `<div class="draggable-options">`;
+        
+        // Shuffle options
+        const shuffledOptions = [...question.fill_blanks.options].sort(() => Math.random() - 0.5);
+        shuffledOptions.forEach(option => {
+          baseHtml += `<div class="draggable-word" draggable="true" data-word="${option}">${option}</div>`;
+        });
+        
+        baseHtml += `</div>`;
+        baseHtml += `<button class="btn-primary submit-answer-btn" id="submit-fill-blank">Cevabı Kontrol Et</button>`;
+        baseHtml += `</div>`;
+      }
+    } else if (baseType === 'matching') {
+      baseHtml += `
+        <div class="matching-container">
+          <div class="matching-columns">
+            <div class="matching-left" id="matching-left">
+              <!-- Left items -->
+            </div>
+            <div class="matching-lines" id="matching-lines">
+              <svg id="matching-svg"></svg>
+            </div>
+            <div class="matching-right" id="matching-right">
+              <!-- Right items (shuffled) -->
+            </div>
+          </div>
+          <div class="matching-actions">
+            <button class="btn-primary submit-answer-btn" id="submit-matching">Eşleştirmeyi Kontrol Et</button>
+          </div>
+        </div>
+      `;
+    } else if (baseType === 'drag_drop') {
+      baseHtml += `
+        <div class="dragdrop-container">
+          <div class="dragdrop-zones" id="dragdrop-zones">
+            <!-- Drop zones will be added dynamically -->
+          </div>
+          <div class="dragdrop-items" id="dragdrop-items">
+            <!-- Draggable items -->
+          </div>
+          <button class="btn-primary submit-answer-btn" id="submit-dragdrop">Kontrol Et</button>
+        </div>
+      `;
     }
-    html += `</div>
-        </div>
-      </div>
-    `;
-  } else if (question.type === 'matching') {
-    // Matching game
-    html += `
-      <div class="matching-container">
-        <div class="matching-header">
-          <span class="matching-icon">🔗</span>
-          <span>EŞLEŞTİRME</span>
-        </div>
-        <div class="matching-columns">
-          <div class="matching-left" id="matching-left">
-            <!-- Left items -->
+
+    return baseHtml;
+  };
+
+  let html = '';
+
+  if (mode === 'duel' || mode === 'group_duel') {
+    if (baseType === 'application') {
+      if (mode === 'duel') {
+        // Duel mode - 2 players compete with opponent selection (application)
+        let opponentHtml = '';
+        
+        // Opponent selection - show all other players
+        if (gameState.duelOpponent === undefined) {
+          const currentPlayerIdx = gameState.playerOrder[gameState.currentPlayerIndex];
+          const otherPlayers = gameState.playerOrder.filter(idx => idx !== currentPlayerIdx);
+          console.log('🎮 Duel - Mevcut oyuncu:', currentPlayerIdx, gameState.players[currentPlayerIdx]?.name);
+          console.log('🎮 Duel - Rakip seçenekleri:', otherPlayers.map(idx => `${idx}: ${gameState.players[idx]?.name}`));
+          
+          if (otherPlayers.length > 0) {
+            opponentHtml = `
+              <div class="duel-opponent-selector" id="duel-opponent-selector">
+                <h3>Karşılacak Oyuncuyu Seçin:</h3>
+                <div class="opponent-buttons">
+                  ${otherPlayers.map(opponentIdx => `
+                    <button class="opponent-btn" onclick="selectDuelOpponent(${opponentIdx})">
+                      <div class="opponent-color" style="background: ${gameState.players[opponentIdx].color.gradient || gameState.players[opponentIdx].color}"></div>
+                      <div class="opponent-name">${gameState.players[opponentIdx].name}</div>
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+            `;
+          }
+        }
+        
+        const appData = question.application || {};
+        const hintText = appData.checkText || '';
+        const instructions = appData.instructions || '';
+        const checkImage = appData.checkImage || question.check_image || '';
+        const currentPlayerIdx = gameState.playerOrder[gameState.currentPlayerIndex];
+        const currentPlayerColor = gameState.players[currentPlayerIdx].color;
+        const opponentColor = gameState.duelOpponent !== undefined ? gameState.players[gameState.duelOpponent].color : 'gray';
+
+        html = timerHtml + `
+          <div class="duel-container application-container">
+            <div class="duel-header">
+              <span class="duel-title">KAPIŞMA - 2 Kişi</span>
+            </div>
+            ${questionHeaderHtml}
+            ${opponentHtml}
+            ${gameState.duelOpponent !== undefined ? `
+              <div class="duel-matchup">
+                <div class="duel-player">
+                  <div class="player-badge" style="background: ${currentPlayerColor.gradient || currentPlayerColor}"></div>
+                  <span class="player-name">${gameState.players[currentPlayerIdx].name}</span>
+                </div>
+                <div class="vs-text">vs</div>
+                <div class="duel-opponent">
+                  <div class="player-badge" style="background: ${opponentColor.gradient || opponentColor}"></div>
+                  <span class="player-name">${gameState.players[gameState.duelOpponent].name}</span>
+                </div>
+              </div>
+              ${hintText ? `<div class="application-hint"><p class="task-hint">💡 İpucu: ${hintText}</p></div>` : ''}
+              <div class="application-status" id="application-status">
+                <p class="status-waiting">${instructions || 'Görevi gerçekleştirin ve kontrol edin.'}</p>
+              </div>
+              <div class="application-buttons" id="application-buttons">
+                ${question.time_limit && question.time_limit > 0 ? `
+                <button class="btn-secondary application-start-timer" id="application-start-timer">Süreyi Başlat</button>
+                ` : ''}
+                <button class="btn-primary application-check hidden" id="application-check">
+                  <i data-lucide="check-circle" class="btn-icon-svg"></i> Kontrol Et
+                </button>
+              </div>
+              <div class="application-verify hidden" id="application-verify">
+                ${checkImage ? `<img src="${checkImage}" alt="Kontrol Görseli" class="application-check-image">` : '<div class="application-check-placeholder"><i data-lucide="image" class="check-placeholder-icon"></i><p>Kontrol Görseli</p></div>'}
+                <p class="verify-question">Uygulama doğru mu?</p>
+                <div class="verify-buttons">
+                  <button class="btn-success verify-correct" id="verify-correct">Doğru</button>
+                  <button class="btn-danger verify-wrong" id="verify-wrong">Yanlış</button>
+                </div>
+              </div>
+            ` : ''}
           </div>
-          <div class="matching-lines" id="matching-lines">
-            <svg id="matching-svg"></svg>
+        `;
+      } else {
+        // Group Duel - all players compete with application task
+        const appData = question.application || {};
+        const hintText = appData.checkText || '';
+        const instructions = appData.instructions || '';
+        const checkImage = appData.checkImage || question.check_image || '';
+
+        html = timerHtml + `
+          <div class="group-duel-container application-container">
+            <div class="duel-header">
+              <span class="duel-title">KAPIŞMA - Hep Birlikte</span>
+            </div>
+            ${questionHeaderHtml}
+            ${hintText ? `<div class="application-hint"><p class="task-hint">💡 İpucu: ${hintText}</p></div>` : ''}
+            <div class="application-status" id="application-status">
+              <p class="status-waiting">${instructions || 'Görevi gerçekleştirin ve kontrol edin.'}</p>
+            </div>
+            <div class="application-buttons" id="application-buttons">
+              ${question.time_limit && question.time_limit > 0 ? `
+              <button class="btn-secondary application-start-timer" id="application-start-timer">Süreyi Başlat</button>
+              ` : ''}
+              <button class="btn-primary application-check hidden" id="application-check">
+                <i data-lucide="check-circle" class="btn-icon-svg"></i> Kontrol Et
+              </button>
+            </div>
+            <div class="application-verify hidden" id="application-verify">
+              ${checkImage ? `<img src="${checkImage}" alt="Kontrol Görseli" class="application-check-image">` : '<div class="application-check-placeholder"><i data-lucide="image" class="check-placeholder-icon"></i><p>Kontrol Görseli</p></div>'}
+              <p class="verify-question">Uygulama doğru mu?</p>
+              <div class="verify-buttons">
+                <button class="btn-success verify-correct" id="verify-correct">Doğru</button>
+                <button class="btn-danger verify-wrong" id="verify-wrong">Yanlış</button>
+              </div>
+            </div>
           </div>
-          <div class="matching-right" id="matching-right">
-            <!-- Right items (shuffled) -->
+        `;
+      }
+    } else {
+      const baseQuestionHtml = buildBaseQuestionHtml();
+
+      if (mode === 'duel') {
+        let opponentHtml = '';
+        
+        if (gameState.duelOpponent === undefined) {
+          const currentPlayerIdx = gameState.playerOrder[gameState.currentPlayerIndex];
+          const otherPlayers = gameState.playerOrder.filter(idx => idx !== currentPlayerIdx);
+          if (otherPlayers.length > 0) {
+            opponentHtml = `
+              <div class="duel-opponent-selector" id="duel-opponent-selector">
+                <h3>Karşılacak Oyuncuyu Seçin:</h3>
+                <div class="opponent-buttons">
+                  ${otherPlayers.map(opponentIdx => `
+                    <button class="opponent-btn" onclick="selectDuelOpponent(${opponentIdx})">
+                      <div class="opponent-color" style="background: ${gameState.players[opponentIdx].color.gradient || gameState.players[opponentIdx].color}"></div>
+                      <div class="opponent-name">${gameState.players[opponentIdx].name}</div>
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+            `;
+          }
+        }
+
+        const currentPlayerIdx = gameState.playerOrder[gameState.currentPlayerIndex];
+        const currentPlayerColor = gameState.players[currentPlayerIdx].color;
+        const opponentColor = gameState.duelOpponent !== undefined ? gameState.players[gameState.duelOpponent].color : 'gray';
+
+        html = timerHtml + `
+          <div class="duel-container">
+            <div class="duel-header">
+              <span class="duel-title">KAPIŞMA - 2 Kişi</span>
+            </div>
+            ${opponentHtml}
+            ${gameState.duelOpponent !== undefined ? `
+              <div class="duel-matchup">
+                <div class="duel-player">
+                  <div class="player-badge" style="background: ${currentPlayerColor.gradient || currentPlayerColor}"></div>
+                  <span class="player-name">${gameState.players[currentPlayerIdx].name}</span>
+                </div>
+                <div class="vs-text">vs</div>
+                <div class="duel-opponent">
+                  <div class="player-badge" style="background: ${opponentColor.gradient || opponentColor}"></div>
+                  <span class="player-name">${gameState.players[gameState.duelOpponent].name}</span>
+                </div>
+              </div>
+              <div class="duel-question-content">
+                ${baseQuestionHtml}
+              </div>
+            ` : ''}
           </div>
-        </div>
-        <button class="btn-primary submit-answer-btn" id="submit-matching">Eşleştirmeyi Kontrol Et</button>
-      </div>
-    `;
-  } else if (question.type === 'drag_drop') {
-    // Drag and drop game
-    html += `
-      <div class="dragdrop-container">
-        <div class="dragdrop-header">
-          <span class="dragdrop-icon">📦</span>
-          <span>SÜRÜKLE BIRAK</span>
-        </div>
-        <div class="dragdrop-zones" id="dragdrop-zones">
-          <!-- Drop zones will be added dynamically -->
-        </div>
-        <div class="dragdrop-items" id="dragdrop-items">
-          <!-- Draggable items -->
-        </div>
-        <button class="btn-primary submit-answer-btn" id="submit-dragdrop">Kontrol Et</button>
-      </div>
-    `;
-  } else if (question.type === 'application') {
-    // Application mode - real world task
+        `;
+      } else {
+        html = timerHtml + `
+          <div class="group-duel-container">
+            <div class="duel-header">
+              <span class="duel-title">KAPIŞMA - Hep Birlikte</span>
+            </div>
+            <div class="duel-question-content">
+              ${baseQuestionHtml}
+            </div>
+          </div>
+        `;
+      }
+    }
+  } else if (baseType === 'application') {
     const appData = question.application || {};
     const hintText = appData.checkText || '';
     const instructions = appData.instructions || '';
     const checkImage = appData.checkImage || question.check_image || '';
 
-    html += `
+    html = timerHtml + `
       <div class="application-container">
+        <div class="application-header">
+          <span>UYGULAMA</span>
+        </div>
+        ${questionHeaderHtml}
         ${hintText ? `<div class="application-hint"><p class="task-hint">💡 İpucu: ${hintText}</p></div>` : ''}
         <div class="application-status" id="application-status">
           <p class="status-waiting">${instructions || 'Görevi gerçekleştirin ve kontrol edin.'}</p>
         </div>
         <div class="application-buttons" id="application-buttons">
           ${question.time_limit && question.time_limit > 0 ? `
-          <button class="btn-secondary application-start-timer" id="application-start-timer">
-            <i data-lucide="clock" class="btn-icon-svg"></i> Süreyi Başlat
-          </button>
+          <button class="btn-secondary application-start-timer" id="application-start-timer">Süreyi Başlat</button>
           ` : ''}
-          <button class="btn-primary application-check" id="application-check">
+          <button class="btn-primary application-check hidden" id="application-check">
             <i data-lucide="check-circle" class="btn-icon-svg"></i> Kontrol Et
           </button>
         </div>
@@ -918,39 +1155,47 @@ function displayQuestion(question) {
         </div>
       </div>
     `;
+  } else {
+    html = timerHtml + buildBaseQuestionHtml();
   }
-  
+
   questionCard.innerHTML = html;
-  
+
   // Start timer if time_limit is set
-  if (question.type !== 'application' && question.time_limit && question.time_limit > 0) {
-    startQuestionTimer(question.time_limit, question);
+  if (baseType !== 'application' && question.time_limit && question.time_limit > 0) {
+    if (!(mode === 'duel' && gameState.duelOpponent === undefined)) {
+      startQuestionTimer(question.time_limit, question);
+    }
   }
-  
+
   // Add event listeners based on question type
-  if (question.type === 'multiple') {
+  if (mode === 'duel' && gameState.duelOpponent === undefined) {
+    return;
+  }
+
+  if (baseType === 'multiple') {
     document.querySelectorAll('.option-btn').forEach(btn => {
       btn.addEventListener('click', () => checkAnswer(btn.dataset.answer, question));
     });
-  } else if (question.type === 'truefalse') {
+  } else if (baseType === 'truefalse') {
     document.querySelectorAll('.tf-btn').forEach(btn => {
       btn.addEventListener('click', () => checkAnswer(btn.dataset.answer, question));
     });
-  } else if (question.type === 'fillblank') {
+  } else if (baseType === 'fillblank') {
     const submitBtn = document.getElementById('submit-fill-blank');
     if (submitBtn) {
       setupDragAndDrop();
       submitBtn.addEventListener('click', () => checkFillBlankAnswer(question));
     }
-  } else if (question.type === 'duel') {
+  } else if (mode === 'duel' && baseType === 'application') {
     setupDuelMode(question);
-  } else if (question.type === 'battle') {
+  } else if (mode === 'group_duel' && baseType === 'application') {
     setupGroupDuelMode(question);
-  } else if (question.type === 'matching') {
+  } else if (baseType === 'matching') {
     setupMatchingGame(question);
-  } else if (question.type === 'drag_drop') {
+  } else if (baseType === 'drag_drop') {
     setupDragDropGame(question);
-  } else if (question.type === 'application') {
+  } else if (baseType === 'application') {
     setupApplicationMode(question);
   }
 }
@@ -1156,6 +1401,11 @@ function startQuestionTimer(seconds, question) {
   questionTimerInterval = setInterval(() => {
     questionTimeRemaining--;
     
+    // Timer tick sesi (sadece son 10 saniyede)
+    if (questionTimeRemaining <= 10 && questionTimeRemaining > 0) {
+      playSound('timer_tick');
+    }
+    
     if (timerText) {
       timerText.textContent = questionTimeRemaining;
       
@@ -1166,6 +1416,10 @@ function startQuestionTimer(seconds, question) {
       } else if (questionTimeRemaining <= 10) {
         timerText.classList.add('warning');
         timerText.classList.remove('danger');
+        // Uyarı sesi (10. saniyede bir kere)
+        if (questionTimeRemaining === 10) {
+          playSound('timer_warning');
+        }
       }
     }
     
@@ -1186,6 +1440,8 @@ function startQuestionTimer(seconds, question) {
     if (questionTimeRemaining <= 0) {
       clearInterval(questionTimerInterval);
       questionTimerInterval = null;
+      // Süre bitti sesi
+      playSound('timer_end');
       handleTimeUp(question);
     }
   }, 1000);
@@ -1214,6 +1470,11 @@ function handleTimeUp(question) {
     btn.disabled = true;
     btn.style.pointerEvents = 'none';
   });
+
+  // Hide control buttons after time up
+  document.querySelectorAll('.submit-answer-btn').forEach(btn => {
+    btn.classList.add('hidden');
+  });
   
   // Show time up message with styled icon
   const questionTimer = document.querySelector('.question-timer');
@@ -1227,91 +1488,259 @@ function handleTimeUp(question) {
     if (typeof lucide !== 'undefined') lucide.createIcons();
   }
   
+  // Kapışma modlarında süre dolarsa katılan herkes -adım alsın
+  const mode = getQuestionMode(question);
+  const baseType = getQuestionBaseType(question);
+  if (mode === 'duel') {
+    showDuelBothWrong(question);
+    return;
+  }
+  if (mode === 'group_duel') {
+    showGroupDuelResult(false, question);
+    return;
+  }
+  
   // Treat as wrong answer
-  showResult(false);
+  showQuestionResult(false, question);
 }
 
-// Duel Mode Setup
-function setupDuelMode(question) {
-  let firstBuzzer = null;
+// Duel Opponent Selection
+function selectDuelOpponent(opponentIdx) {
+  gameState.duelOpponent = opponentIdx;
+  console.log('Seçilen rakip:', gameState.players[opponentIdx].name);
+  console.log('Mevcut oyuncu:', gameState.currentPlayerIndex, gameState.players[gameState.currentPlayerIndex].name);
   
-  document.querySelectorAll('.duel-buzzer').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (firstBuzzer) return; // Already buzzed
+  // Soruyu yeniden göster
+  const question = gameState.currentQuestion;
+  if (question && getQuestionMode(question) === 'duel') {
+    displayQuestion(question);
+    // Süreyi manuel başlatacak - auto-start yok
+  }
+}
+
+// Duel Mode Setup - Application task with 2 player competition
+function setupDuelMode(question) {
+  // Check if opponent is selected
+  if (gameState.duelOpponent === undefined) {
+    console.log('Rakip seçilmedi, seçim bekleniyor');
+    return;
+  }
+  
+  // Application modunda kullanılan aynı kurulum
+  const startTimerBtn = document.getElementById('application-start-timer');
+  const checkBtn = document.getElementById('application-check');
+  const verifySection = document.getElementById('application-verify');
+  const buttonsSection = document.getElementById('application-buttons');
+  const statusSection = document.getElementById('application-status');
+
+  // Süreyi başlat butonuna tıklandığında (manuel başlatma)
+  if (startTimerBtn) {
+    startTimerBtn.addEventListener('click', () => {
+      // Butonu gizle
+      startTimerBtn.classList.add('timer-started');
+      startTimerBtn.disabled = true;
       
-      firstBuzzer = btn.dataset.player;
-      
-      // Highlight winner
-      btn.classList.add('buzzed');
-      btn.closest('.duel-player').classList.add('winner');
-      
-      // Disable other buzzer
-      document.querySelectorAll('.duel-buzzer').forEach(b => {
-        b.disabled = true;
-      });
-      
-      // Show answer section
-      const answerSection = document.getElementById('duel-answer-section');
-      const winnerText = document.getElementById('duel-winner-text');
-      
-      if (answerSection) {
-        answerSection.classList.remove('hidden');
-        winnerText.textContent = `Oyuncu ${firstBuzzer} cevaplıyor!`;
+      // Kontrol Et butonunu göster
+      if (checkBtn) {
+        checkBtn.classList.remove('hidden');
       }
       
-      // Add answer event listeners
-      document.querySelectorAll('.duel-options .option-btn').forEach(optBtn => {
-        optBtn.addEventListener('click', () => checkAnswer(optBtn.dataset.answer, question));
-      });
+      // Süre başladığına dair uyarı sesi çal
+      playSound('timer_warning');
+      
+      // Süreyi başlat
+      if (question.time_limit && question.time_limit > 0) {
+        startQuestionTimer(question.time_limit, question);
+      }
     });
+  }
+  
+  // Kontrol Et butonuna tıklandığında
+  if (checkBtn) {
+    checkBtn.addEventListener('click', () => {
+      // Süreyi durdur
+      stopQuestionTimer();
+      
+      // Kontrol Et butonunu gizle
+      buttonsSection.classList.add('hidden');
+      statusSection.classList.add('hidden');
+      
+      // Kontrol görseli ve doğru/yanlış butonlarını göster
+      verifySection.classList.remove('hidden');
+      
+      // Lucide ikonlarını oluştur
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    });
+  }
+  
+  // Doğru butonuna tıklandığında (Duel: First player to finish correctly wins)
+  document.getElementById('verify-correct').addEventListener('click', () => {
+    document.getElementById('verify-correct').disabled = true;
+    document.getElementById('verify-wrong').disabled = true;
+    showDuelResult(true, question);
+  });
+  
+  // Yanlış butonuna tıklandığında (Her iki oyuncu da - puan alır)
+  document.getElementById('verify-wrong').addEventListener('click', () => {
+    document.getElementById('verify-correct').disabled = true;
+    document.getElementById('verify-wrong').disabled = true;
+    showDuelBothWrong(question);
   });
 }
 
-// Group Duel Mode Setup
-function setupGroupDuelMode(question) {
-  const groupPlayers = document.getElementById('group-players');
-  let firstBuzzer = null;
+function showDuelBothWrong(question) {
+  // Her iki oyuncuya da yanlış adım uygula
+  const wrongSteps = question.wrong_steps || 1;
+  const playerIdx = getCurrentPlayerIndex();
+  const opponentIdx = gameState.duelOpponent;
   
-  // Create buzzer for each player
-  for (let i = 0; i < gameState.playerCount; i++) {
-    const playerDiv = document.createElement('div');
-    playerDiv.className = 'group-player';
-    playerDiv.id = `group-player-${i}`;
-    playerDiv.innerHTML = `
-      <div class="group-player-name">Oyuncu ${i + 1}</div>
-      <button class="group-buzzer" data-player="${i}">
-        <span class="buzzer-icon">🔔</span>
-      </button>
-    `;
-    groupPlayers.appendChild(playerDiv);
+  if (opponentIdx === undefined) {
+    showResult(false);
+    return;
   }
   
-  // Add buzzer event listeners
-  document.querySelectorAll('.group-buzzer').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (firstBuzzer !== null) return;
+  // Verify section'dan sadece başlık ve butonları gizle
+  const verifyQuestion = document.querySelector('.verify-question');
+  const verifyButtons = document.querySelector('.verify-buttons');
+  if (verifyQuestion) verifyQuestion.style.display = 'none';
+  if (verifyButtons) verifyButtons.style.display = 'none';
+  
+  // Her iki oyuncunun da puanını düşür (0'ın altına inmesin)
+  const playerPrevScore = Number(gameState.scores[playerIdx] || 0);
+  const opponentPrevScore = Number(gameState.scores[opponentIdx] || 0);
+  const playerNewScore = Math.max(0, playerPrevScore - wrongSteps);
+  const opponentNewScore = Math.max(0, opponentPrevScore - wrongSteps);
+  const playerChange = playerNewScore - playerPrevScore;
+  const opponentChange = opponentNewScore - opponentPrevScore;
+  gameState.scores[playerIdx] = playerNewScore;
+  gameState.scores[opponentIdx] = opponentNewScore;
+  
+  // Sonuçları göster
+  const playerName = gameState.players[playerIdx].name;
+  const opponentName = gameState.players[opponentIdx].name;
+  const playerColor = gameState.players[playerIdx].color;
+  const opponentColor = gameState.players[opponentIdx].color;
+  
+  resultIndicator.classList.remove('hidden', 'correct', 'wrong');
+  resultIndicator.classList.add('wrong');
+  
+  resultIndicator.innerHTML = `
+    <div class="duel-result-container">
+      <div class="result-header">
+        <div class="result-icon result-icon-error">
+          <i data-lucide="thumbs-down"></i>
+        </div>
+        <h3 class="result-title">HER İKİSİ DE YANLIŞ!</h3>
+      </div>
+      <div class="duel-result-players">
+        <div class="result-player loser-player">
+          <div class="result-player-badge" style="background: ${playerColor.gradient || playerColor}"></div>
+          <div class="result-player-name">${playerName}</div>
+          <div class="result-player-score negative">${playerChange} adım</div>
+        </div>
+        <div class="result-player loser-player">
+          <div class="result-player-badge" style="background: ${opponentColor.gradient || opponentColor}"></div>
+          <div class="result-player-name">${opponentName}</div>
+          <div class="result-player-score negative">${opponentChange} adım</div>
+        </div>
+      </div>
+      <div class="result-actions"><button class="btn-primary result-ok-btn">Tamam</button></div>
+    </div>
+  `;
+  
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+  
+  const okBtn = resultIndicator.querySelector('.result-ok-btn');
+  if (okBtn) {
+    okBtn.addEventListener('click', () => {
+      okBtn.disabled = true;
+      resultIndicator.classList.add('hidden');
+      gameState.duelOpponent = undefined;
+      addNextPlayerButton();
+    });
+  }
+  
+  // Sunucuya bildir
+  socket.emit('answer-submitted', {
+    gameId: gameState.gameId,
+    player: playerIdx,
+    isCorrect: false,
+    steps: -wrongSteps,
+    scores: gameState.scores
+  });
+  
+  socket.emit('answer-submitted', {
+    gameId: gameState.gameId,
+    player: opponentIdx,
+    isCorrect: false,
+    steps: -wrongSteps,
+    scores: gameState.scores
+  });
+  
+  updateGameUI();
+}
+
+// Group Duel Mode Setup - Application task with all players competition
+function setupGroupDuelMode(question) {
+  // Application modunda kullanılan aynı kurulum
+  const startTimerBtn = document.getElementById('application-start-timer');
+  const checkBtn = document.getElementById('application-check');
+  const verifySection = document.getElementById('application-verify');
+  const buttonsSection = document.getElementById('application-buttons');
+  const statusSection = document.getElementById('application-status');
+
+  // Süreyi başlat butonuna tıklandığında (manuel başlatma)
+  if (startTimerBtn) {
+    startTimerBtn.addEventListener('click', () => {
+      // Butonu gizle
+      startTimerBtn.classList.add('timer-started');
+      startTimerBtn.disabled = true;
       
-      firstBuzzer = parseInt(btn.dataset.player);
-      
-      btn.classList.add('buzzed');
-      btn.closest('.group-player').classList.add('winner');
-      
-      document.querySelectorAll('.group-buzzer').forEach(b => {
-        b.disabled = true;
-      });
-      
-      const answerSection = document.getElementById('group-answer-section');
-      const winnerText = document.getElementById('group-winner-text');
-      
-      if (answerSection) {
-        answerSection.classList.remove('hidden');
-        winnerText.textContent = `Oyuncu ${firstBuzzer + 1} cevaplıyor!`;
+      // Kontrol Et butonunu göster
+      if (checkBtn) {
+        checkBtn.classList.remove('hidden');
       }
       
-      document.querySelectorAll('.group-options .option-btn').forEach(optBtn => {
-        optBtn.addEventListener('click', () => checkAnswer(optBtn.dataset.answer, question));
-      });
+      // Süre başladığına dair uyarı sesi çal
+      playSound('timer_warning');
+      
+      // Süreyi başlat
+      if (question.time_limit && question.time_limit > 0) {
+        startQuestionTimer(question.time_limit, question);
+      }
     });
+  }
+  
+  // Kontrol Et butonuna tıklandığında
+  if (checkBtn) {
+    checkBtn.addEventListener('click', () => {
+      // Süreyi durdur
+      stopQuestionTimer();
+      
+      // Kontrol Et butonunu gizle
+      buttonsSection.classList.add('hidden');
+      statusSection.classList.add('hidden');
+      
+      // Kontrol görseli ve doğru/yanlış butonlarını göster
+      verifySection.classList.remove('hidden');
+      
+      // Lucide ikonlarını oluştur
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    });
+  }
+  
+  // Doğru butonuna tıklandığında (Group Duel: First player to finish correctly wins, others lose)
+  document.getElementById('verify-correct').addEventListener('click', () => {
+    document.getElementById('verify-correct').disabled = true;
+    document.getElementById('verify-wrong').disabled = true;
+    showGroupDuelResult(true, question);
+  });
+  
+  // Yanlış butonuna tıklandığında
+  document.getElementById('verify-wrong').addEventListener('click', () => {
+    document.getElementById('verify-correct').disabled = true;
+    document.getElementById('verify-wrong').disabled = true;
+    showGroupDuelResult(false, question);
   });
 }
 
@@ -1323,6 +1752,25 @@ function setupMatchingGame(question) {
   
   let selectedLeft = null;
   const connections = [];
+
+  const clearConnectionVisuals = (conn) => {
+    const leftItem = document.querySelector(`.matching-left-item[data-index="${conn.left}"]`);
+    const rightItem = document.querySelector(`.matching-right-item[data-original="${conn.right}"]`);
+
+    if (leftItem) {
+      leftItem.classList.remove('connected');
+      leftItem.removeAttribute('data-pair');
+    }
+
+    if (rightItem) {
+      rightItem.classList.remove('connected');
+      rightItem.removeAttribute('data-pair');
+    }
+  };
+
+  const applyPairBadge = (item, pairId) => {
+    item.setAttribute('data-pair', pairId);
+  };
   
   // Create left items
   pairs.forEach((pair, index) => {
@@ -1360,17 +1808,23 @@ function setupMatchingGame(question) {
       const existingConn = connections.find(c => c.left === selectedLeft || c.right === item.dataset.original);
       if (existingConn) {
         // Remove existing connection
+        clearConnectionVisuals(existingConn);
         connections.splice(connections.indexOf(existingConn), 1);
       }
       
+      const pairId = Number(selectedLeft) + 1;
       connections.push({
         left: selectedLeft,
-        right: item.dataset.original
+        right: item.dataset.original,
+        pairId
       });
       
       // Visual feedback
-      document.querySelector(`.matching-left-item[data-index="${selectedLeft}"]`).classList.add('connected');
+      const leftItem = document.querySelector(`.matching-left-item[data-index="${selectedLeft}"]`);
+      leftItem.classList.add('connected');
+      applyPairBadge(leftItem, pairId);
       item.classList.add('connected');
+      applyPairBadge(item, pairId);
       
       document.querySelectorAll('.matching-left-item').forEach(i => i.classList.remove('selected'));
       selectedLeft = null;
@@ -1378,6 +1832,11 @@ function setupMatchingGame(question) {
       drawMatchingLines(connections);
     });
   });
+
+  const redrawLines = () => drawMatchingLines(connections);
+  leftColumn.addEventListener('scroll', redrawLines, { passive: true });
+  rightColumn.addEventListener('scroll', redrawLines, { passive: true });
+  window.addEventListener('resize', redrawLines);
   
   // Submit button
   document.getElementById('submit-matching').addEventListener('click', () => {
@@ -1403,8 +1862,9 @@ function setupMatchingGame(question) {
     }
     
     document.getElementById('submit-matching').disabled = true;
+    document.getElementById('submit-matching').classList.add('hidden');
     stopQuestionTimer();
-    showResult(allCorrect);
+    showQuestionResult(allCorrect, question);
   });
 }
 
@@ -1413,6 +1873,16 @@ function drawMatchingLines(connections) {
   if (!svg) return;
   
   svg.innerHTML = '';
+
+  const lineColors = [
+    '#7C3AED',
+    '#2563EB',
+    '#059669',
+    '#D97706',
+    '#DC2626',
+    '#0EA5E9',
+    '#9333EA'
+  ];
   
   connections.forEach(conn => {
     const leftItem = document.querySelector(`.matching-left-item[data-index="${conn.left}"]`);
@@ -1422,14 +1892,17 @@ function drawMatchingLines(connections) {
       const leftRect = leftItem.getBoundingClientRect();
       const rightRect = rightItem.getBoundingClientRect();
       const svgRect = svg.getBoundingClientRect();
+
+      const pairColor = lineColors[(Number(conn.pairId || 1) - 1) % lineColors.length];
       
       const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
       line.setAttribute('x1', leftRect.right - svgRect.left);
       line.setAttribute('y1', leftRect.top + leftRect.height / 2 - svgRect.top);
       line.setAttribute('x2', rightRect.left - svgRect.left);
       line.setAttribute('y2', rightRect.top + rightRect.height / 2 - svgRect.top);
-      line.setAttribute('stroke', '#667eea');
-      line.setAttribute('stroke-width', '2');
+      line.setAttribute('stroke', pairColor);
+      line.setAttribute('stroke-width', '3');
+      line.setAttribute('stroke-linecap', 'round');
       
       svg.appendChild(line);
     }
@@ -1438,24 +1911,35 @@ function drawMatchingLines(connections) {
 
 // Drag Drop Game Setup
 function setupDragDropGame(question) {
-  const zonesContainer = document.getElementById('dragdrop-zones');
   const itemsContainer = document.getElementById('dragdrop-items');
   const dragData = question.drag_drop || {};
   
-  let zones = [];
   let items = [];
+  let touchItem = null;
+  let touchStartY = 0;
   
   if (dragData.type === 'order') {
-    // For order type, create a single zone and items with correct order
-    zones = [{ label: 'Doğru Sıra' }];
+    // For order type, items can be dragged and reordered
     items = dragData.items.map((text, index) => ({
       text: text,
-      zone: '0',
       order: index
     }));
   } else if (dragData.type === 'category') {
     // For category type, create zones from categories
-    zones = dragData.categories.map(cat => ({ label: cat.name }));
+    const zonesContainer = document.getElementById('dragdrop-zones');
+    const zones = dragData.categories.map(cat => ({ label: cat.name }));
+    
+    zones.forEach((zone, index) => {
+      const zoneDiv = document.createElement('div');
+      zoneDiv.className = 'drop-zone';
+      zoneDiv.dataset.zone = index;
+      zoneDiv.innerHTML = `
+        <div class="zone-label">${zone.label}</div>
+        <div class="zone-items" data-zone="${index}"></div>
+      `;
+      zonesContainer.appendChild(zoneDiv);
+    });
+    
     dragData.categories.forEach((cat, catIndex) => {
       cat.items.forEach(itemText => {
         items.push({
@@ -1466,95 +1950,145 @@ function setupDragDropGame(question) {
     });
   }
   
-  // Create drop zones
-  zones.forEach((zone, index) => {
-    const zoneDiv = document.createElement('div');
-    zoneDiv.className = 'drop-zone';
-    zoneDiv.dataset.zone = index;
-    zoneDiv.innerHTML = `
-      <div class="zone-label">${zone.label}</div>
-      <div class="zone-items" data-zone="${index}"></div>
-    `;
-    zonesContainer.appendChild(zoneDiv);
-  });
+  let draggedItem = null;
   
-  // Create draggable items (shuffled)
-  const shuffledItems = [...items].sort(() => Math.random() - 0.5);
-  shuffledItems.forEach((item, index) => {
+  // Create draggable items (shuffled for order type)
+  const shuffledItems = dragData.type === 'order' 
+    ? [...items].sort(() => Math.random() - 0.5)
+    : items;
+    
+  shuffledItems.forEach((item) => {
     const itemDiv = document.createElement('div');
     itemDiv.className = 'dragdrop-item';
     itemDiv.draggable = true;
     itemDiv.dataset.item = item.text;
-    itemDiv.dataset.correctZone = item.zone;
     if (item.order !== undefined) {
       itemDiv.dataset.correctOrder = item.order;
+    }
+    if (item.zone !== undefined) {
+      itemDiv.dataset.correctZone = item.zone;
     }
     itemDiv.textContent = item.text;
     itemsContainer.appendChild(itemDiv);
   });
   
-  // Drag events
-  let draggedItem = null;
-  
-  document.querySelectorAll('.dragdrop-item').forEach(item => {
-    item.addEventListener('dragstart', (e) => {
-      draggedItem = item;
-      item.classList.add('dragging');
-    });
-    
-    item.addEventListener('dragend', () => {
-      item.classList.remove('dragging');
-      draggedItem = null;
-    });
-    
-    // Touch support
-    item.addEventListener('click', () => {
-      if (item.classList.contains('placed')) return;
+  // Setup drag events for all items
+  const setupAllDragEvents = () => {
+    document.querySelectorAll('#dragdrop-items .dragdrop-item').forEach(item => {
+      item.addEventListener('dragstart', (e) => {
+        draggedItem = item;
+        item.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
       
-      document.querySelectorAll('.dragdrop-item').forEach(i => i.classList.remove('selected'));
-      item.classList.add('selected');
-    });
-  });
-  
-  document.querySelectorAll('.zone-items').forEach(zone => {
-    zone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      zone.classList.add('drag-over');
-    });
-    
-    zone.addEventListener('dragleave', () => {
-      zone.classList.remove('drag-over');
-    });
-    
-    zone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      zone.classList.remove('drag-over');
+      item.addEventListener('dragend', () => {
+        item.classList.remove('dragging');
+        draggedItem = null;
+        document.querySelectorAll('#dragdrop-items .dragdrop-item').forEach(i => i.classList.remove('drag-over-item'));
+      });
       
-      if (draggedItem) {
-        zone.appendChild(draggedItem);
-        draggedItem.classList.add('placed');
+      // Touch events for mobile
+      item.addEventListener('touchstart', (e) => {
+        if (dragData.type === 'order' && !itemsContainer.classList.contains('checked')) {
+          touchItem = item;
+          touchStartY = e.touches[0].clientY;
+          item.classList.add('dragging');
+        }
+      });
+      
+      item.addEventListener('touchend', () => {
+        if (touchItem) {
+          touchItem.classList.remove('dragging');
+          touchItem = null;
+        }
+        document.querySelectorAll('#dragdrop-items .dragdrop-item').forEach(i => i.classList.remove('drag-over-item'));
+      });
+      
+      item.addEventListener('touchmove', (e) => {
+        if (!touchItem || dragData.type !== 'order' || itemsContainer.classList.contains('checked')) return;
+        e.preventDefault();
+        
+        const touch = e.touches[0];
+        const deltaY = touch.clientY - touchStartY;
+        
+        // Yukarı sürükle
+        if (deltaY < -40) {
+          const prevItem = touchItem.previousElementSibling;
+          if (prevItem && prevItem.classList.contains('dragdrop-item')) {
+            itemsContainer.insertBefore(touchItem, prevItem);
+            setupAllDragEvents();
+            touchStartY = touch.clientY;
+          }
+        }
+        // Aşağı sürükle
+        else if (deltaY > 40) {
+          const nextItem = touchItem.nextElementSibling?.nextElementSibling;
+          if (nextItem && nextItem.classList.contains('dragdrop-item')) {
+            itemsContainer.insertBefore(touchItem, nextItem);
+            setupAllDragEvents();
+            touchStartY = touch.clientY;
+          }
+        }
+      });
+      
+      // For order type, allow reordering within items container
+      if (dragData.type === 'order') {
+        item.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          if (draggedItem && draggedItem !== item) {
+            item.classList.add('drag-over-item');
+          }
+        });
+        
+        item.addEventListener('dragleave', () => {
+          item.classList.remove('drag-over-item');
+        });
+        
+        item.addEventListener('drop', (e) => {
+          e.preventDefault();
+          if (draggedItem && draggedItem !== item) {
+            itemsContainer.insertBefore(draggedItem, item);
+            setupAllDragEvents();
+          }
+        });
       }
     });
     
-    // Touch support
-    zone.addEventListener('click', () => {
-      const selectedItem = document.querySelector('.dragdrop-item.selected');
-      if (selectedItem) {
-        zone.appendChild(selectedItem);
-        selectedItem.classList.add('placed');
-        selectedItem.classList.remove('selected');
-      }
-    });
-  });
+    // Setup zone events for category type
+    if (dragData.type === 'category') {
+      document.querySelectorAll('.zone-items').forEach(zone => {
+        zone.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          zone.classList.add('drag-over');
+        });
+        
+        zone.addEventListener('dragleave', () => {
+          zone.classList.remove('drag-over');
+        });
+        
+        zone.addEventListener('drop', (e) => {
+          e.preventDefault();
+          zone.classList.remove('drag-over');
+          
+          if (draggedItem) {
+            zone.appendChild(draggedItem);
+            draggedItem.classList.add('placed');
+            setupAllDragEvents();
+          }
+        });
+      });
+    }
+  };
+  
+  setupAllDragEvents();
   
   // Submit button
   document.getElementById('submit-dragdrop').addEventListener('click', () => {
     let allCorrect = true;
     
     if (dragData.type === 'order') {
-      // Check order within the zone
-      const zoneItems = document.querySelector('.zone-items');
-      const placedItems = zoneItems.querySelectorAll('.dragdrop-item');
+      // Check order of items in container
+      const placedItems = document.querySelectorAll('#dragdrop-items .dragdrop-item');
       
       placedItems.forEach((item, index) => {
         const correctOrder = parseInt(item.dataset.correctOrder);
@@ -1578,17 +2112,31 @@ function setupDragDropGame(question) {
           }
         });
       });
+      
+      // Check items not placed
+      document.querySelectorAll('#dragdrop-items .dragdrop-item').forEach(item => {
+        if (!item.classList.contains('placed')) {
+          item.classList.add('wrong');
+          allCorrect = false;
+        }
+      });
     }
     
-    // Check items not placed
+    // Hide button
+    document.getElementById('submit-dragdrop').classList.add('hidden');
+    
+    // Mark as checked
+    itemsContainer.classList.add('checked');
+    
+    // Disable dragging
     document.querySelectorAll('#dragdrop-items .dragdrop-item').forEach(item => {
-      item.classList.add('wrong');
-      allCorrect = false;
+      item.draggable = false;
+      item.style.cursor = 'default';
     });
     
     document.getElementById('submit-dragdrop').disabled = true;
     stopQuestionTimer();
-    showResult(allCorrect);
+    showQuestionResult(allCorrect, question);
   });
 }
 
@@ -1606,8 +2154,19 @@ function setupApplicationMode(question) {
   // Süreyi başlat butonuna tıklandığında (manuel başlatma)
   if (startTimerBtn) {
     startTimerBtn.addEventListener('click', () => {
+      // Butonu gizle
+      startTimerBtn.classList.add('timer-started');
       startTimerBtn.disabled = true;
-      startTimerBtn.classList.add('active');
+      
+      // Kontrol Et butonunu göster
+      if (checkBtn) {
+        checkBtn.classList.remove('hidden');
+      }
+      
+      // Süre başladığına dair uyarı sesi çal
+      playSound('timer_warning');
+      
+      // Süreyi başlat
       if (question.time_limit && question.time_limit > 0) {
         startQuestionTimer(question.time_limit, question);
       }
@@ -1615,43 +2174,50 @@ function setupApplicationMode(question) {
   }
   
   // Kontrol Et butonuna tıklandığında
-  checkBtn.addEventListener('click', () => {
-    // Süreyi durdur
-    stopQuestionTimer();
-    
-    // Kontrol Et butonunu gizle
-    buttonsSection.classList.add('hidden');
-    statusSection.classList.add('hidden');
-    
-    // Kontrol görseli ve doğru/yanlış butonlarını göster
-    verifySection.classList.remove('hidden');
-    
-    // Lucide ikonlarını oluştur
-    if (typeof lucide !== 'undefined') lucide.createIcons();
-  });
+  if (checkBtn) {
+    checkBtn.addEventListener('click', () => {
+      // Süreyi durdur
+      stopQuestionTimer();
+      
+      // Kontrol Et butonunu gizle
+      buttonsSection.classList.add('hidden');
+      statusSection.classList.add('hidden');
+      
+      // Kontrol görseli ve doğru/yanlış butonlarını göster
+      verifySection.classList.remove('hidden');
+      
+      // Lucide ikonlarını oluştur
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    });
+  }
   
   // Doğru butonuna tıklandığında
   document.getElementById('verify-correct').addEventListener('click', () => {
     document.getElementById('verify-correct').disabled = true;
     document.getElementById('verify-wrong').disabled = true;
-    showResult(true);
+    showQuestionResult(true, question);
   });
   
   // Yanlış butonuna tıklandığında
   document.getElementById('verify-wrong').addEventListener('click', () => {
     document.getElementById('verify-correct').disabled = true;
     document.getElementById('verify-wrong').disabled = true;
-    showResult(false);
+    showQuestionResult(false, question);
   });
 }
 
 // Check Answer
 function checkAnswer(answer, question) {
   stopQuestionTimer();
+  const mode = getQuestionMode(question);
+  const baseType = getQuestionBaseType(question);
   const isCorrect = answer.toLowerCase() === question.correct_answer.toLowerCase();
   
+  // Ses efekti çal
+  playSound(isCorrect ? 'correct_answer' : 'wrong_answer');
+  
   // Highlight buttons
-  if (question.type === 'multiple') {
+  if (baseType === 'multiple') {
     document.querySelectorAll('.option-btn').forEach(btn => {
       btn.disabled = true;
       if (btn.dataset.answer.toLowerCase() === question.correct_answer.toLowerCase()) {
@@ -1660,7 +2226,7 @@ function checkAnswer(answer, question) {
         btn.classList.add('wrong');
       }
     });
-  } else if (question.type === 'truefalse') {
+  } else if (baseType === 'truefalse') {
     document.querySelectorAll('.tf-btn').forEach(btn => {
       btn.disabled = true;
       if (btn.dataset.answer === question.correct_answer) {
@@ -1669,6 +2235,20 @@ function checkAnswer(answer, question) {
         btn.classList.add('wrong');
       }
     });
+  }
+
+  if (mode === 'duel' && baseType !== 'application') {
+    if (isCorrect) {
+      showDuelResult(true, question);
+    } else {
+      showDuelBothWrong(question);
+    }
+    return;
+  }
+
+  if (mode === 'group_duel' && baseType !== 'application') {
+    showGroupDuelResult(isCorrect, question);
+    return;
   }
   
   showResult(isCorrect);
@@ -1695,6 +2275,9 @@ function checkFillBlankAnswer(question) {
     }
   });
   
+  // Ses efekti çal
+  playSound(allCorrect ? 'correct_answer' : 'wrong_answer');
+  
   // Tüm etkileşimleri devre dışı bırak
   document.getElementById('submit-fill-blank').disabled = true;
   document.querySelectorAll('.draggable-word').forEach(el => {
@@ -1703,8 +2286,37 @@ function checkFillBlankAnswer(question) {
   document.querySelectorAll('.blank-slot').forEach(el => {
     el.style.pointerEvents = 'none';
   });
-  
-  showResult(allCorrect);
+
+  showQuestionResult(allCorrect, question);
+}
+
+function showQuestionResult(isCorrect, question) {
+  const mode = getQuestionMode(question);
+  const baseType = getQuestionBaseType(question);
+
+  if (mode === 'duel' && baseType !== 'application') {
+    if (isCorrect) {
+      showDuelResult(true, question);
+    } else {
+      showDuelBothWrong(question);
+    }
+    return;
+  }
+
+  if (mode === 'group_duel' && baseType !== 'application') {
+    showGroupDuelResult(isCorrect, question);
+    return;
+  }
+
+  // Regular application mode - gizle
+  if (baseType === 'application') {
+    const verifyQuestion = document.querySelector('.verify-question');
+    const verifyButtons = document.querySelector('.verify-buttons');
+    if (verifyQuestion) verifyQuestion.style.display = 'none';
+    if (verifyButtons) verifyButtons.style.display = 'none';
+  }
+
+  showResult(isCorrect);
 }
 
 // Show Result
@@ -1727,18 +2339,35 @@ function showResult(isCorrect) {
   
   gameState.scores[playerIdx] = newPosition;
   
-  // Show indicator
+  // Get player info
+  const playerName = gameState.players[playerIdx].name;
+  const playerColor = gameState.players[playerIdx].color;
+  
+  // Show indicator - kapışma tasarımı gibi
   resultIndicator.classList.remove('hidden', 'correct', 'wrong');
   resultIndicator.classList.add(isCorrect ? 'correct' : 'wrong');
   
-  if (isCorrect) {
-    resultIndicator.innerHTML = `✓<br><small>+${actualChange} adım</small>`;
-  } else {
-    resultIndicator.innerHTML = `✗<br><small>${actualChange} adım</small>`;
-  }
+  resultIndicator.innerHTML = `
+    <div class="duel-result-container">
+      <div class="result-header">
+        <div class="result-icon ${isCorrect ? 'result-icon-success' : 'result-icon-error'}">
+          <i data-lucide="${isCorrect ? 'check-circle' : 'thumbs-down'}"></i>
+        </div>
+        <h3 class="result-title">${isCorrect ? 'DOĞRU!' : 'YANLIŞ!'}</h3>
+      </div>
+      <div class="duel-result-players">
+        <div class="result-player ${isCorrect ? 'winner-player' : 'loser-player'}">
+          <div class="result-player-badge" style="background: ${playerColor.gradient || playerColor}"></div>
+          <div class="result-player-name">${playerName}</div>
+          <div class="result-player-score ${isCorrect ? 'positive' : 'negative'}">${isCorrect ? '+' : ''}${actualChange} adım</div>
+        </div>
+      </div>
+      <div class="result-actions"><button class="btn-primary result-ok-btn">Tamam</button></div>
+    </div>
+  `;
 
-  // Onay butonu ekle
-  resultIndicator.innerHTML += '<div class="result-actions"><button class="btn-primary result-ok-btn">Tamam</button></div>';
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+
   const okBtn = resultIndicator.querySelector('.result-ok-btn');
   if (okBtn) {
     okBtn.addEventListener('click', () => {
@@ -1767,6 +2396,323 @@ function showResult(isCorrect) {
   
 }
 
+// Duel Mode Result - Sıradaki oyuncu doğru bitirirlerse +puan, yanlış ise -puan
+function showDuelResult(isCorrect, question) {
+  const correctSteps = question.correct_steps || 2;
+  const wrongSteps = question.wrong_steps || 1;
+  const playerIdx = getCurrentPlayerIndex();
+  const opponentIdx = gameState.duelOpponent;
+  
+  const currentPlayerName = gameState.players[playerIdx].name;
+  const opponentName = gameState.players[opponentIdx].name;
+  const currentPlayerColor = gameState.players[playerIdx].color;
+  const opponentColor = gameState.players[opponentIdx].color;
+  
+  // Verify section'dan sadece başlık ve butonları gizle
+  const verifyQuestion = document.querySelector('.verify-question');
+  const verifyButtons = document.querySelector('.verify-buttons');
+  if (verifyQuestion) verifyQuestion.style.display = 'none';
+  if (verifyButtons) verifyButtons.style.display = 'none';
+  
+  // Cevap butonlarını devre dışı bırak (gizleme değil)
+  document.querySelectorAll('.option-btn, .tf-btn, .duel-buzzer, .submit-answer-btn, .draggable-word, .blank-slot, .application-check, .verify-correct, .verify-wrong').forEach(btn => {
+    btn.disabled = true;
+    btn.style.pointerEvents = 'none';
+  });
+  
+  // Winner/Loser selection UI
+  resultIndicator.classList.remove('hidden', 'correct', 'wrong');
+  resultIndicator.innerHTML = `
+    <div class="duel-winner-selector">
+      <p class="duel-question-text">Kim kazandı?</p>
+      <div class="winner-selector-buttons">
+        <button class="winner-select-btn current-player" onclick="confirmDuelWinner('${playerIdx}', '${opponentIdx}', ${correctSteps}, ${wrongSteps})">
+          <div class="selector-color" style="background: ${currentPlayerColor.gradient || currentPlayerColor}"></div>
+          <div class="selector-name">${currentPlayerName}</div>
+        </button>
+        <button class="winner-select-btn opponent-player" onclick="confirmDuelWinner('${opponentIdx}', '${playerIdx}', ${correctSteps}, ${wrongSteps})">
+          <div class="selector-color" style="background: ${opponentColor.gradient || opponentColor}"></div>
+          <div class="selector-name">${opponentName}</div>
+        </button>
+      </div>
+    </div>
+  `;
+  
+  // Lucide ikonlarını oluştur
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+// Duel Winner Confirmation
+function confirmDuelWinner(winnerIdx, loserIdx, correctSteps, wrongSteps) {
+  const prevWinnerScore = Number(gameState.scores[winnerIdx] || 0);
+  const prevLoserScore = Number(gameState.scores[loserIdx] || 0);
+  
+  const winnerNewPosition = prevWinnerScore + correctSteps;
+  const winnerFinalPosition = Math.max(0, Math.min(TOTAL_STEPS, winnerNewPosition));
+  const winnerChange = winnerFinalPosition - prevWinnerScore;
+  
+  const loserNewPosition = prevLoserScore - wrongSteps;
+  const loserFinalPosition = Math.max(0, Math.min(TOTAL_STEPS, loserNewPosition));
+  const loserChange = loserFinalPosition - prevLoserScore;
+  
+  gameState.scores[winnerIdx] = winnerFinalPosition;
+  gameState.scores[loserIdx] = loserFinalPosition;
+  
+  const winnerName = gameState.players[winnerIdx].name;
+  const loserName = gameState.players[loserIdx].name;
+  const winnerColor = gameState.players[winnerIdx].color;
+  const loserColor = gameState.players[loserIdx].color;
+  
+  // Show result
+  const winnerDisplayChange = Number.isFinite(winnerChange) ? winnerChange : correctSteps;
+  const loserDisplayChange = Number.isFinite(loserChange) ? loserChange : -wrongSteps;
+  
+  resultIndicator.innerHTML = `
+    <div class="duel-result-container">
+      <div class="result-header">
+        <div class="result-icon result-icon-success">
+          <i data-lucide="trophy"></i>
+        </div>
+        <h3 class="result-title">${winnerName} KAZANDI!</h3>
+      </div>
+      <div class="duel-result-players">
+        <div class="result-player winner-player">
+          <div class="result-player-badge" style="background: ${winnerColor.gradient || winnerColor}"></div>
+          <div class="result-player-name">${winnerName}</div>
+          <div class="result-player-score positive">+${winnerDisplayChange} adım</div>
+        </div>
+        <div class="result-player loser-player">
+          <div class="result-player-badge" style="background: ${loserColor.gradient || loserColor}"></div>
+          <div class="result-player-name">${loserName}</div>
+          <div class="result-player-score negative">${loserDisplayChange} adım</div>
+        </div>
+      </div>
+      <div class="result-actions"><button class="btn-primary result-ok-btn">Tamam</button></div>
+    </div>
+  `;
+  
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+  
+  const okBtn = resultIndicator.querySelector('.result-ok-btn');
+  if (okBtn) {
+    okBtn.addEventListener('click', () => {
+      okBtn.disabled = true;
+      resultIndicator.classList.add('hidden');
+      
+      // Duel'i sıfırla
+      gameState.duelOpponent = undefined;
+      
+      // Kontrol et: oyuncu kazandı mı?
+      if (winnerFinalPosition >= TOTAL_STEPS) {
+        showScreen('results');
+        showResults();
+      } else if (loserFinalPosition >= TOTAL_STEPS) {
+        showScreen('results');
+        showResults();
+      } else {
+        addNextPlayerButton();
+      }
+    });
+  }
+  
+  // Emit score update
+  socket.emit('answer-submitted', {
+    gameId: gameState.gameId,
+    player: winnerIdx,
+    isCorrect: true,
+    steps: winnerChange,
+    scores: gameState.scores
+  });
+  
+  updateGameUI();
+}
+
+// Group Duel Mode Result - Oyuncuyu seçerek doğru/yanlış belirle
+function showGroupDuelResult(isCorrect, question) {
+  const correctSteps = question.correct_steps || 2;
+  const wrongSteps = question.wrong_steps || 1;
+  const currentPlayerIdx = getCurrentPlayerIndex();
+  
+  // Verify section'dan sadece başlık ve butonları gizle
+  const verifyQuestion = document.querySelector('.verify-question');
+  const verifyButtons = document.querySelector('.verify-buttons');
+  if (verifyQuestion) verifyQuestion.style.display = 'none';
+  if (verifyButtons) verifyButtons.style.display = 'none';
+  
+  // Cevap butonlarını devre dışı bırak (gizleme değil)
+  document.querySelectorAll('.option-btn, .tf-btn, .duel-buzzer, .submit-answer-btn, .draggable-word, .blank-slot, .application-check, .verify-correct, .verify-wrong').forEach(btn => {
+    btn.disabled = true;
+    btn.style.pointerEvents = 'none';
+  });
+  
+  // Tüm oyuncuları göster ve kimin doğru cevap verdiğini seç
+  resultIndicator.classList.remove('hidden', 'correct', 'wrong');
+  
+  // Doğru cevap verilmedi - kapışma modunda adım değişmez
+  if (!isCorrect) {
+    resultIndicator.classList.add('wrong');
+    
+    // Tüm oyuncuların puanını düşür (0'ın altına inmesin)
+    const playersHtml = gameState.playerOrder.map(playerIdx => {
+      const prevScore = Number(gameState.scores[playerIdx] || 0);
+      const newScore = Math.max(0, prevScore - wrongSteps);
+      const change = newScore - prevScore;
+      gameState.scores[playerIdx] = newScore;
+      
+      const playerColor = gameState.players[playerIdx].color;
+      const playerName = gameState.players[playerIdx].name;
+      return `
+        <div class="result-player loser-player">
+          <div class="result-player-badge" style="background: ${playerColor.gradient || playerColor}"></div>
+          <div class="result-player-name">${playerName}</div>
+          <div class="result-player-score negative">${change} adım</div>
+        </div>
+      `;
+    }).join('');
+    
+    resultIndicator.innerHTML = `
+      <div class="duel-result-container">
+        <div class="result-header">
+          <div class="result-icon result-icon-error">
+            <i data-lucide="thumbs-down"></i>
+          </div>
+          <h3 class="result-title">HEPSİ YANLIŞ!</h3>
+        </div>
+        <div class="duel-result-players">
+          ${playersHtml}
+        </div>
+        <div class="result-actions"><button class="btn-primary result-ok-btn">Tamam</button></div>
+      </div>
+    `;
+    
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+    
+    const okBtn = resultIndicator.querySelector('.result-ok-btn');
+    if (okBtn) {
+      okBtn.addEventListener('click', () => {
+        okBtn.disabled = true;
+        resultIndicator.classList.add('hidden');
+        addNextPlayerButton();
+      });
+    }
+    
+    updateGameUI();
+  } else {
+    // Doğru cevap veren seçimi için butonları göster
+    resultIndicator.innerHTML = `
+      <div class="duel-winner-selector">
+        <p class="duel-question-text">Doğru cevap veren kimdir?</p>
+        <div class="winner-selector-buttons">
+          ${gameState.playerOrder.map(playerIdx => {
+            const playerColor = gameState.players[playerIdx].color;
+            const playerName = gameState.players[playerIdx].name;
+            return `
+              <button class="winner-select-btn" onclick="confirmGroupDuelWinner(${playerIdx}, ${correctSteps}, ${wrongSteps})">
+                <div class="selector-color" style="background: ${playerColor.gradient || playerColor}"></div>
+                <div class="selector-name">${playerName}</div>
+              </button>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+    
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+  }
+}
+
+// Group Duel Winner Confirmation
+function confirmGroupDuelWinner(winnerIdx, correctSteps, wrongSteps) {
+  // Kazanan oyuncu puanlarını artır
+  const prevWinnerScore = Number(gameState.scores[winnerIdx] || 0);
+  gameState.scores[winnerIdx] = prevWinnerScore + correctSteps;
+  
+  const winnerName = gameState.players[winnerIdx].name;
+  const winnerColor = gameState.players[winnerIdx].color;
+  
+  // Kaybeden oyuncuların puanlarını azalt (0'ın altına inmesin)
+  const loserChanges = {};
+  gameState.playerOrder.forEach(playerIdx => {
+    if (playerIdx !== winnerIdx) {
+      const prevScore = Number(gameState.scores[playerIdx] || 0);
+      const newScore = Math.max(0, prevScore - wrongSteps);
+      loserChanges[playerIdx] = newScore - prevScore;
+      gameState.scores[playerIdx] = newScore;
+    }
+  });
+  
+  // Show result
+  const winnerDisplayChange = Number.isFinite(gameState.scores[winnerIdx] - prevWinnerScore)
+    ? gameState.scores[winnerIdx] - prevWinnerScore
+    : correctSteps;
+  
+  const loserPlayersHtml = gameState.playerOrder.map(playerIdx => {
+    if (playerIdx === winnerIdx) return '';
+    const loserColor = gameState.players[playerIdx].color;
+    const loserName = gameState.players[playerIdx].name;
+    const change = Number.isFinite(loserChanges[playerIdx]) ? loserChanges[playerIdx] : -wrongSteps;
+    return `
+      <div class="result-player loser-player">
+        <div class="result-player-badge" style="background: ${loserColor.gradient || loserColor}"></div>
+        <div class="result-player-name">${loserName}</div>
+        <div class="result-player-score negative">${change} adım</div>
+      </div>
+    `;
+  }).join('');
+  
+  resultIndicator.innerHTML = `
+    <div class="duel-result-container">
+      <div class="result-header">
+        <div class="result-icon result-icon-success">
+          <i data-lucide="trophy"></i>
+        </div>
+        <h3 class="result-title">${winnerName} KAZANDI!</h3>
+      </div>
+      <div class="duel-result-players">
+        <div class="result-player winner-player">
+          <div class="result-player-badge" style="background: ${winnerColor.gradient || winnerColor}"></div>
+          <div class="result-player-name">${winnerName}</div>
+          <div class="result-player-score positive">+${winnerDisplayChange} adım</div>
+        </div>
+        ${loserPlayersHtml}
+      </div>
+      <div class="result-actions"><button class="btn-primary result-ok-btn">Tamam</button></div>
+    </div>
+  `;
+  
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+  
+  const okBtn = resultIndicator.querySelector('.result-ok-btn');
+  if (okBtn) {
+    okBtn.addEventListener('click', () => {
+      okBtn.disabled = true;
+      resultIndicator.classList.add('hidden');
+      
+      const currentPlayerIdx = getCurrentPlayerIndex();
+      
+      // Kontrol et: oyuncu kazandı mı?
+      if (gameState.scores[winnerIdx] >= TOTAL_STEPS) {
+        showScreen('results');
+        showResults();
+      } else {
+        // Sonraki oyuncuya git
+        addNextPlayerButton();
+      }
+    });
+  }
+  
+  // Emit score update
+  socket.emit('answer-submitted', {
+    gameId: gameState.gameId,
+    player: winnerIdx,
+    isCorrect: true,
+    steps: correctSteps,
+    scores: gameState.scores
+  });
+  
+  updateGameUI();
+}
+
 // Add Next Player Button
 function addNextPlayerButton() {
   // Önceki butonları temizle
@@ -1781,12 +2727,25 @@ function addNextPlayerButton() {
   const question = gameState.currentQuestion;
   
   // Bilgi butonu (eğer soru info içeriyorsa)
-  if (question && question.info && question.info.enabled && question.info.text) {
+  if (question && question.info && question.info.enabled) {
     const infoBtn = document.createElement('button');
     infoBtn.className = 'btn-secondary info-btn';
-    infoBtn.innerHTML = '<i data-lucide="info"></i> Bilgi';
+    infoBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; margin-right: 8px; vertical-align: middle;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg> Bilgi';
     infoBtn.addEventListener('click', showQuestionInfo);
     btnContainer.appendChild(infoBtn);
+  }
+  
+  // AR Animasyon butonu (eğer soru AR animasyon içeriyorsa)
+  if (question && question.info && question.info.ar_animation && question.info.ar_animation.type) {
+    const arBtn = document.createElement('button');
+    arBtn.className = 'btn-ar-animation';
+    arBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg> AR Animasyon';
+    arBtn.addEventListener('click', () => {
+      const arAnimation = question.info.ar_animation;
+      const title = question.info.title || 'AR Animasyon';
+      openARViewer(arAnimation, title);
+    });
+    btnContainer.appendChild(arBtn);
   }
   
   // Sonraki oyuncu butonu
@@ -1819,16 +2778,7 @@ function showQuestionInfo() {
   // Resim HTML'i oluştur
   const imageHtml = image ? `<div class="info-popup-image"><img src="${image}" alt="Bilgi resmi"></div>` : '';
   
-  // AR animasyon kontrolü
-  const arAnimation = info.ar_animation;
-  const arButtonHtml = arAnimation && arAnimation.type ? `
-    <button class="btn-ar-animation">
-      <i data-lucide="box"></i>
-      AR Animasyonu Göster
-    </button>
-  ` : '';
-  
-  // Popup oluştur
+  // Popup oluştur (AR butonu artık popup içinde değil, result-buttons container'ında)
   const popup = document.createElement('div');
   popup.className = 'info-popup-overlay';
   popup.innerHTML = `
@@ -1841,7 +2791,6 @@ function showQuestionInfo() {
       <div class="info-popup-content">
         ${imageHtml}
         <p>${text.replace(/\n/g, '<br>')}</p>
-        ${arButtonHtml}
       </div>
       <button class="btn-primary info-popup-ok">Tamam</button>
     </div>
@@ -1851,14 +2800,6 @@ function showQuestionInfo() {
   
   // Lucide icons
   if (typeof lucide !== 'undefined') lucide.createIcons();
-  
-  // AR butonu event listener
-  const arBtn = popup.querySelector('.btn-ar-animation');
-  if (arBtn && arAnimation) {
-    arBtn.addEventListener('click', () => {
-      openARViewer(arAnimation, title);
-    });
-  }
   
   // Kapat butonları
   popup.querySelector('.info-popup-close').addEventListener('click', () => popup.remove());
@@ -1992,6 +2933,9 @@ async function nextPlayer() {
     gameState.currentPlayerIndex = 0;
   }
   
+  // Sonraki oyuncu sesi
+  playSound('next_player');
+  
   // Update game in database
   await fetch(`/api/games/${gameState.gameId}`, {
     method: 'PUT',
@@ -2044,24 +2988,30 @@ function showQRScannerWithTypeSelection() {
   showQRScanner();
 }
 
-// Socket Events
-socket.on('update-scores', (data) => {
-  gameState.scores = data.scores;
-  updateGameUI();
-});
+// Setup Socket Listeners
+function setupSocketListeners() {
+  // Socket Events
+  socket.on('update-scores', (data) => {
+    gameState.scores = data.scores;
+    updateGameUI();
+  });
 
-socket.on('player-changed', (data) => {
-  gameState.currentPlayer = data.currentPlayer;
-  updateGameUI();
-});
+  socket.on('player-changed', (data) => {
+    gameState.currentPlayer = data.currentPlayer;
+    updateGameUI();
+  });
 
-socket.on('show-results', (data) => {
-  showResults();
-});
+  socket.on('show-results', (data) => {
+    showResults();
+  });
+}
 
 // Show Results
 function showResults() {
   showScreen('results');
+  
+  // Oyun bitiş sesi
+  playSound('game_end');
   
   const finalScores = document.getElementById('final-scores');
   finalScores.innerHTML = '';
@@ -2070,6 +3020,12 @@ function showResults() {
   const sortedPlayers = Object.entries(gameState.scores)
     .map(([idx, score]) => ({ idx: parseInt(idx), score, player: gameState.players[parseInt(idx)] }))
     .sort((a, b) => b.score - a.score);
+  
+  // Kazanan varsa zafer sesi çal
+  const hasWinner = sortedPlayers.some(entry => entry.score >= TOTAL_STEPS);
+  if (hasWinner) {
+    setTimeout(() => playSound('victory'), 500);
+  }
   
   // Rank icons with Lucide
   const rankIcons = [
@@ -2145,7 +3101,7 @@ const QUESTION_TYPES = [
   { type: 'truefalse', name: 'Doğru/Yanlış' },
   { type: 'fillblank', name: 'Boşluk Doldurma' },
   { type: 'duel', name: 'Kapışma 2\'li' },
-  { type: 'battle', name: 'Kapışma Birlikte' },
+  { type: 'group_duel', name: 'Kapışma Hep Birlikte' },
   { type: 'matching', name: 'Eşleme' },
   { type: 'drag_drop', name: 'Sürükle Bırak' },
   { type: 'application', name: 'Uygulama' }
@@ -2275,45 +3231,36 @@ function initSlotMachine() {
 
 async function showTypeSelectionModal() {
   const modal = document.getElementById('type-selection-modal');
+  if (!modal) return;
+
+  await buildWeightedTypeList();
+  initSlotMachine();
   modal.classList.remove('hidden');
-  
-  // Aktif oyuncuyu bul (playerOrder'a göre sıradaki oyuncu)
+
   const currentPlayerIdx = gameState.currentPlayerIndex;
   const currentPlayer = gameState.players[gameState.playerOrder[currentPlayerIdx]];
   const modalBadge = document.getElementById('modal-player-badge');
-  
   if (modalBadge && currentPlayer) {
-    // Oyuncu adını yaz
     modalBadge.textContent = currentPlayer.name;
-    
-    // Oyuncunun kendi seçtiği rengi kullan (gradient)
     modalBadge.className = 'player-badge modal-player-badge';
     if (currentPlayer.color && currentPlayer.color.gradient) {
       modalBadge.style.background = currentPlayer.color.gradient;
     }
   }
-  
-  // Reset state
-  gameState.selectedQuestionType = null;
-  isSlotSpinning = false;
-  
-  // Build weighted list and initialize slot machine
-  await buildWeightedTypeList();
-  initSlotMachine();
-  
+
   // Reset reel position and styling
   const reel = document.getElementById('slot-reel');
   if (reel) {
     reel.style.transition = 'none';
     reel.style.transform = 'translateY(0)';
   }
-  
+
   // Remove selection styling
   document.getElementById('slot-window')?.classList.remove('selected');
-  
+
   // Hide confirm section
   document.getElementById('confirm-type-section').classList.add('hidden');
-  
+
   // Reset spin button
   const spinBtn = document.getElementById('spin-slot-btn');
   if (spinBtn) {
@@ -2321,7 +3268,7 @@ async function showTypeSelectionModal() {
     spinBtn.innerHTML = '<i data-lucide="zap" class="btn-icon-svg"></i> Çevir!';
     spinBtn.style.background = '';
   }
-  
+
   if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
@@ -2715,7 +3662,7 @@ function showMatchingQuestion(question) {
       // Tamamlandı mı kontrol et
       if (matchedPairs.length === pairs.length) {
         setTimeout(() => {
-          handleAnswer(true, question);
+          showQuestionResult(true, question);
         }, 500);
       }
     });
@@ -2723,7 +3670,7 @@ function showMatchingQuestion(question) {
   
   // Süre varsa başlat
   if (question.time_limit > 0) {
-    startTimer(question.time_limit, () => handleAnswer(false, question));
+    startTimer(question.time_limit, () => showQuestionResult(false, question));
   }
 }
 
@@ -2818,12 +3765,12 @@ function setupDragDropHandlers(question, dragData) {
     const correctOrder = dragData.items;
     
     const isCorrect = JSON.stringify(droppedItems) === JSON.stringify(correctOrder);
-    handleAnswer(isCorrect, question);
+    showQuestionResult(isCorrect, question);
   });
   
   // Süre varsa başlat
   if (question.time_limit > 0) {
-    startTimer(question.time_limit, () => handleAnswer(false, question));
+    startTimer(question.time_limit, () => showQuestionResult(false, question));
   }
 }
 
@@ -2885,6 +3832,12 @@ function showApplicationQuestion(question) {
 }
 
 function showApplicationCheck(question, appData) {
+  // Application butonlarını gizle
+  const applicationButtons = document.getElementById('application-buttons');
+  const applicationStatus = document.getElementById('application-status');
+  if (applicationButtons) applicationButtons.style.display = 'none';
+  if (applicationStatus) applicationStatus.style.display = 'none';
+  
   const modal = document.createElement('div');
   modal.className = 'modal';
   modal.innerHTML = `
@@ -2908,11 +3861,279 @@ function showApplicationCheck(question, appData) {
   
   document.getElementById('app-correct-btn').addEventListener('click', () => {
     modal.remove();
-    handleAnswer(true, question);
+    showQuestionResult(true, question);
   });
   
   document.getElementById('app-wrong-btn').addEventListener('click', () => {
     modal.remove();
-    handleAnswer(false, question);
+    showQuestionResult(false, question);
   });
 }
+
+// =========================
+// SES YÖNETİMİ FONKSİYONLARI
+// =========================
+
+// Ses yöneticisini başlat
+async function initSoundManager() {
+  try {
+    // SoundManager sınıfı kontrol et
+    if (typeof SoundManager === 'undefined') {
+      console.warn('SoundManager bulunamadı, sound-manager.js yüklenmiş mi?');
+      return;
+    }
+    
+    // Ses yöneticisi oluştur
+    soundManager = new SoundManager();
+    await soundManager.init();
+    
+    // Ses kontrol UI'sını oluştur
+    createSoundControls();
+    
+    // Arka plan müziği: Otomatik başlaması devre dışı
+    // Ses seviyesi ayarlarının yönetimi ve manual başlatma UI'dan yapılacak
+    
+    console.log('Ses yöneticisi başlatıldı');
+  } catch (error) {
+    console.error('Ses yöneticisi başlatılamadı:', error);
+  }
+}
+
+// Ses kontrol UI'sını oluştur
+function createSoundControls() {
+  // Kontrol paneli zaten varsa çık
+  if (document.getElementById('sound-controls')) return;
+  
+  const controlsHtml = `
+    <div id="sound-controls" class="sound-controls">
+      <button id="sound-toggle-btn" class="sound-control-btn" title="Sesi Aç/Kapat">
+        <i data-lucide="volume-2" id="sound-icon"></i>
+      </button>
+      <div id="volume-control" class="volume-control hidden" style="position: absolute; top: 60px; right: 3px; flex-direction: column; width: 42px; padding: 10px 0; box-sizing: border-box;">
+        <label style="font-size: 9px; font-weight: 600; color: #4a9eff; margin-bottom: 6px; text-align: center;">Efekt</label>
+        <input type="range" 
+           id="volume-slider" 
+           min="0" 
+           max="100" 
+           value="70" 
+           class="volume-slider"
+           orient="vertical"
+           style="writing-mode: vertical-lr; direction: rtl; width: 6px; height: 70px; margin: 0 auto;">
+        <span id="volume-value" style="text-align: center; margin: 6px 0; font-size: 9px; font-weight: 600; color: #4a9eff;">70%</span>
+        
+        <label style="font-size: 9px; font-weight: 600; color: #4a9eff; margin: 6px 0 6px; text-align: center;">Müzik</label>
+        <input type="range" 
+           id="music-slider" 
+           min="0" 
+           max="100" 
+           value="50" 
+           class="volume-slider"
+           orient="vertical"
+           style="writing-mode: vertical-lr; direction: rtl; width: 6px; height: 70px; margin: 0 auto;">
+        <span id="music-value" style="text-align: center; margin-top: 6px; font-size: 9px; font-weight: 600; color: #4a9eff;">50%</span>
+      </div>
+    </div>
+  `;
+  
+  // Body'ye ekle
+  document.body.insertAdjacentHTML('beforeend', controlsHtml);
+  
+  // Event listener'ları ekle
+  const toggleBtn = document.getElementById('sound-toggle-btn');
+  const volumeControl = document.getElementById('volume-control');
+  const volumeSlider = document.getElementById('volume-slider');
+  const volumeValue = document.getElementById('volume-value');
+  const musicSlider = document.getElementById('music-slider');
+  const musicValue = document.getElementById('music-value');
+  const soundIcon = document.getElementById('sound-icon');
+
+  // Mobilde popover'ı butonun altına aç (aşağı doğru)
+  if (window.innerWidth <= 768) {
+    volumeControl.style.top = '60px';
+    volumeControl.style.bottom = 'unset';
+    volumeControl.style.right = '0px';
+    volumeControl.style.width = '48px';
+  }
+
+  // Her etkileşimde arka plan müziğini ayakta tut
+  const resumeBackgroundIfPaused = () => {
+    if (!soundManager) return;
+    const bgAudio = soundManager.sounds?.background_music;
+    if (bgAudio && bgAudio.paused && bgAudio.readyState >= 2) {
+      bgAudio.play().catch(() => {});
+    }
+  };
+
+  // Yönetici paneline de yansıtmak için volume değerini API'ye gönder
+  const updateVolumeOnServer = async (type, volume) => {
+    try {
+      console.log(`📡 Sunucuya gönderiliyor: ${type} = ${volume}%`);
+      
+      const response = await fetch('/api/update-sound-setting', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ soundType: type, volume })
+      });
+      
+      if (response.ok) {
+        console.log(`✅ ${type} sunucuda kaydedildi`);
+        // Socket.IO ile admin paneline bildir
+        if (socket !== null && socket !== undefined) {
+          socket.emit('sound-setting-updated', { soundType: type, volume });
+          console.log(`📢 Socket.IO: sound-setting-updated gönderildi`);
+        }
+      } else {
+        console.error(`❌ Sunucu hatası:`, response.status);
+      }
+    } catch (e) {
+      console.error('❌ Ses güncelleme başarısız:', e.message);
+    }
+  };
+  
+  // soundManager'dan ses seviyelerini al ve UI'ya yansıt
+  if (soundManager) {
+    // ✅ Önce soundTypes değerlerini kontrol et, sonra settings'den oku
+    let musicVolume = soundManager.soundTypes?.background_music?.volume;
+    let effectVolume = soundManager.soundTypes?.correct_answer?.volume;
+    
+    // Eğer soundTypes'ta değer yoksa, settings'den hesapla
+    if (musicVolume === undefined || musicVolume === null) {
+      musicVolume = Math.round(soundManager.settings.musicVolume * 100);
+      console.log('⚠️ soundTypes.background_music.volume undefined, settings kullanılıyor:', musicVolume);
+    }
+    
+    if (effectVolume === undefined || effectVolume === null) {
+      effectVolume = Math.round(soundManager.settings.effectVolume * 100);
+      console.log('⚠️ soundTypes.correct_answer.volume undefined, settings kullanılıyor:', effectVolume);
+    }
+
+    console.log('🎚️ Slider değerleri ayarlanıyor:', { musicVolume, effectVolume });
+
+    musicSlider.value = musicVolume;
+    musicValue.textContent = musicVolume + '%';
+
+    volumeSlider.value = effectVolume;
+    volumeValue.textContent = effectVolume + '%';
+
+    // SoundManager iç ayarlarını da bu değerlere eşitle
+    soundManager.setMusicVolume(musicVolume / 100);
+    soundManager.setEffectVolume(effectVolume / 100);
+    
+    // İkonu da başlangıç değerlerine göre ayarla
+    if (musicVolume === 0 && effectVolume === 0) {
+      soundIcon.setAttribute('data-lucide', 'volume-x');
+    } else if (musicVolume < 50 && effectVolume < 50) {
+      soundIcon.setAttribute('data-lucide', 'volume-1');
+    } else {
+      soundIcon.setAttribute('data-lucide', 'volume-2');
+    }
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+  }
+  
+  // Ses aç/kapat - CLICK event
+  let isMuted = false;
+  toggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    
+    // Volume control'ü toggle et
+    volumeControl.classList.toggle('hidden');
+    resumeBackgroundIfPaused();
+  });
+  
+  // Sayfa başka yerini tıklayınca kapat
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#sound-controls')) {
+      volumeControl.classList.add('hidden');
+    }
+    resumeBackgroundIfPaused();
+  });
+  
+  // Efekt ses seviyesi değiştir
+  volumeSlider.addEventListener('input', (e) => {
+    const volume = parseInt(e.target.value);
+    volumeValue.textContent = volume + '%';
+    
+    console.log('Efekt ses seviyesi:', volume + '%');
+    
+    if (soundManager) {
+      soundManager.setEffectVolume(volume / 100);
+      // Etkiyi soundTypes'a da yaz (admin ile senkron)
+      if (soundManager.soundTypes?.correct_answer) {
+        soundManager.soundTypes.correct_answer.volume = volume;
+      }
+      updateVolumeOnServer('correct_answer', volume);
+      
+      // İkonu güncelle - %0 ise X, değilse normal
+      if (volume === 0 && parseInt(musicSlider.value) === 0) {
+        soundIcon.setAttribute('data-lucide', 'volume-x');
+      } else if (volume < 50 && parseInt(musicSlider.value) < 50) {
+        soundIcon.setAttribute('data-lucide', 'volume-1');
+      } else {
+        soundIcon.setAttribute('data-lucide', 'volume-2');
+      }
+      resumeBackgroundIfPaused();
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+  });
+  
+  // Müzik ses seviyesi değiştir
+  musicSlider.addEventListener('input', (e) => {
+    const volume = parseInt(e.target.value);
+    musicValue.textContent = volume + '%';
+    
+    console.log('Müzik ses seviyesi:', volume + '%');
+    
+    if (soundManager) {
+      soundManager.setMusicVolume(volume / 100);
+      // Arkaplan müziği için konfig'i güncelle ve sunucuya ilet
+      if (soundManager.soundTypes?.background_music) {
+        soundManager.soundTypes.background_music.volume = volume;
+      }
+      updateVolumeOnServer('background_music', volume);
+      resumeBackgroundIfPaused();
+      
+      // İkonu güncelle
+      if (volume === 0 && parseInt(volumeSlider.value) === 0) {
+        soundIcon.setAttribute('data-lucide', 'volume-x');
+      } else if (volume < 50 && parseInt(volumeSlider.value) < 50) {
+        soundIcon.setAttribute('data-lucide', 'volume-1');
+      } else {
+        soundIcon.setAttribute('data-lucide', 'volume-2');
+      }
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+  });
+
+  // Genel kullanıcı etkileşimlerinde müziği ayakta tut
+  document.addEventListener('touchstart', resumeBackgroundIfPaused, { passive: true });
+  document.addEventListener('pointerdown', resumeBackgroundIfPaused, { passive: true });
+  
+  // Lucide ikonlarını oluştur
+  if (typeof lucide !== 'undefined') {
+    lucide.createIcons();
+  }
+}
+
+// Ses çal (yardımcı fonksiyon)
+function playSound(soundType, options = {}) {
+  if (soundManager) {
+    soundManager.play(soundType, options);
+  }
+}
+
+// Tüm butonlara click ses efekti ekle
+document.addEventListener('DOMContentLoaded', () => {
+  // Event delegation kullanarak tüm buton tıklamalarını yakala
+  document.addEventListener('click', (e) => {
+    // Buton veya buton içindeki element tıklandıysa
+    const button = e.target.closest('button');
+    if (button && !button.disabled) {
+      // Ses kontrol butonları için ses çalma (sonsuz döngü önleme)
+      if (!button.id.includes('sound-toggle') && 
+          !button.classList.contains('sound-control-btn') &&
+          !button.classList.contains('btn-play-sound')) {
+        playSound('button_click');
+      }
+    }
+  });
+});

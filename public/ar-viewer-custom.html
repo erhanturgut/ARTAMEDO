@@ -181,11 +181,33 @@
       const params = getUrlParams();
       window.location.href = `ar-viewer.html?type=${params.type}`;
     }
+    
+    // Cleanup fonksiyonu
+    function cleanupAR() {
+      try {
+        const video = document.querySelector('video');
+        if (video && video.srcObject) {
+          const tracks = video.srcObject.getTracks();
+          tracks.forEach(track => track.stop());
+          video.srcObject = null;
+        }
+        console.log('AR cleanup completed');
+      } catch (e) {
+        console.error('Cleanup error:', e);
+      }
+    }
 
     function closeAR() {
-      window.close();
-      setTimeout(() => { window.location.href = 'admin.html'; }, 100);
+      cleanupAR();
+      setTimeout(() => {
+        window.close();
+        setTimeout(() => { window.location.href = 'admin.html'; }, 100);
+      }, 100);
     }
+    
+    // Sayfa kapatılırken cleanup yap
+    window.addEventListener('beforeunload', cleanupAR);
+    window.addEventListener('pagehide', cleanupAR);
 
     // Sayfa yüklendiğinde
     document.addEventListener('DOMContentLoaded', () => {

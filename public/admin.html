@@ -1,17 +1,57 @@
 <!DOCTYPE html>
 <html lang="tr">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <title>Yönetici Paneli - ARTAMEDO</title>
-  <link rel="stylesheet" href="admin.css">
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="admin.css?v=14">
+  <link rel="stylesheet" href="/libs/fonts/fonts.css">
   <!-- Lucide Icons - Modern flat line icons -->
-  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="/libs/lucide.min.js"></script>
 </head>
+
 <body>
+  <!-- Login Screen -->
+  <div id="login-screen" class="login-screen">
+    <div class="login-container">
+      <div class="login-box">
+        <div class="login-logo">
+          <i data-lucide="lock" class="login-icon"></i>
+        </div>
+        <h1>Yönetici Paneli</h1>
+        <p>Erişim için şifre girin</p>
+        
+        <form id="login-form" class="login-form">
+          <div class="form-group">
+            <input 
+              type="password" 
+              id="password-input" 
+              placeholder="Şifre" 
+              required 
+              autocomplete="off"
+              class="password-input"
+            >
+            <button type="button" id="toggle-password" class="toggle-password-btn" title="Şifreyi göster/gizle">
+              <i data-lucide="eye" class="eye-icon"></i>
+            </button>
+          </div>
+          
+          <label class="remember-checkbox">
+            <input type="checkbox" id="remember-password">
+            <span>Bu bilgisayarda hatırla</span>
+          </label>
+          
+          <button type="submit" class="btn-login">Giriş Yap</button>
+          <div id="login-error" class="login-error hidden"></div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- Tam Ekran Butonu -->
   <button id="fullscreen-btn" class="fullscreen-btn" title="Tam Ekran">
     <i data-lucide="maximize" class="fullscreen-icon"></i>
@@ -24,7 +64,7 @@
         <i data-lucide="zap" class="logo-icon-svg"></i>
         <h1>ARTAMEDO Admin</h1>
       </div>
-      
+
       <nav class="nav-menu">
         <a href="#" class="nav-item active" data-section="questions">
           <i data-lucide="file-text" class="nav-icon-svg"></i>
@@ -46,6 +86,14 @@
           <i data-lucide="sliders" class="nav-icon-svg"></i>
           Ayarlar
         </a>
+        <a href="#" class="nav-item" data-section="sounds">
+          <i data-lucide="volume-2" class="nav-icon-svg"></i>
+          Ses Yönetimi
+        </a>
+        <a href="#" class="nav-item" data-section="change-password">
+          <i data-lucide="key" class="nav-icon-svg"></i>
+          Şifre Değiştir
+        </a>
         <a href="/" class="nav-item">
           <i data-lucide="gamepad-2" class="nav-icon-svg"></i>
           Oyuna Git
@@ -60,12 +108,12 @@
         <div class="section-header">
           <h2>Sorular</h2>
         </div>
-        
+
         <!-- Soru İstatistikleri -->
         <div id="question-stats" class="question-stats">
           <!-- Dinamik olarak eklenecek -->
         </div>
-        
+
         <div id="questions-list" class="questions-list">
           <!-- Dinamik olarak eklenecek -->
         </div>
@@ -76,10 +124,29 @@
         <div class="section-header">
           <h2 id="form-title">Yeni Soru Ekle</h2>
         </div>
-        
+
         <form id="question-form" class="question-form">
           <input type="hidden" id="question-id">
-          
+
+          <div class="form-group">
+            <label>Oyun Modu</label>
+            <div class="mode-selector">
+              <button type="button" class="mode-btn active" data-mode="normal">
+                <i data-lucide="layers" class="type-icon-svg"></i>
+                Normal
+              </button>
+              <button type="button" class="mode-btn" data-mode="duel">
+                <i data-lucide="swords" class="type-icon-svg"></i>
+                Kapışma 2'li
+              </button>
+              <button type="button" class="mode-btn" data-mode="group_duel">
+                <i data-lucide="users" class="type-icon-svg"></i>
+                Kapışma Hep Birlikte
+              </button>
+            </div>
+            <small id="mode-hint">Kapışma modlarında seçtiğiniz soru tipi kullanılacaktır.</small>
+          </div>
+
           <div class="form-group">
             <label>Soru Tipi</label>
             <div class="type-selector">
@@ -95,14 +162,6 @@
                 <i data-lucide="pencil" class="type-icon-svg"></i>
                 Boşluk Doldurma
               </button>
-              <button type="button" class="type-btn" data-type="duel">
-                <i data-lucide="swords" class="type-icon-svg"></i>
-                Kapışma 2'li
-              </button>
-              <button type="button" class="type-btn" data-type="battle">
-                <i data-lucide="users" class="type-icon-svg"></i>
-                Kapışma Birlikte
-              </button>
               <button type="button" class="type-btn" data-type="matching">
                 <i data-lucide="puzzle" class="type-icon-svg"></i>
                 Eşleme
@@ -117,14 +176,14 @@
               </button>
             </div>
           </div>
-          
+
           <div class="form-row">
             <div class="form-group">
               <label>QR Kod İçeriği</label>
               <input type="text" id="qr-code" placeholder="Örn: 1, 2, 3, A1, B2..." required>
               <small>Bu değer QR koda yazdırılacak ve taratıldığında bu soru gösterilecek</small>
             </div>
-            
+
             <div class="form-group">
               <label>Adım Sayısı</label>
               <div class="step-inputs">
@@ -141,7 +200,7 @@
               </div>
             </div>
           </div>
-          
+
           <div class="form-row">
             <div class="form-group">
               <label>Süre Sınırı (Saniye)</label>
@@ -151,13 +210,14 @@
               </div>
             </div>
           </div>
-          
+
           <div class="form-group">
             <label>Soru Metni</label>
             <textarea id="question-text" rows="3" placeholder="Sorunuzu yazın..." required></textarea>
-            <small class="fillblank-hint hidden">Boşluk için ___ (3 alt çizgi) kullanın. Örn: Elektrik akımının birimi ___ dir.</small>
+            <small class="fillblank-hint hidden">Boşluk için ___ (3 alt çizgi) kullanın. Örn: Elektrik akımının birimi
+              ___ dir.</small>
           </div>
-          
+
           <div class="form-group">
             <label>Görsel (Opsiyonel)</label>
             <div class="image-upload-container">
@@ -172,7 +232,7 @@
             </div>
             <input type="hidden" id="image-data">
           </div>
-          
+
           <!-- Multiple Choice Options -->
           <div id="multiple-options" class="form-group">
             <label>Şıklar</label>
@@ -203,7 +263,7 @@
               </div>
             </div>
           </div>
-          
+
           <!-- True/False Options -->
           <div id="truefalse-options" class="form-group hidden">
             <label>Doğru Cevap</label>
@@ -216,7 +276,7 @@
               </button>
             </div>
           </div>
-          
+
           <!-- Fill Blank Options -->
           <div id="fillblank-options" class="form-group hidden">
             <label>Boşluk Cevapları (Sırayla)</label>
@@ -227,7 +287,7 @@
               </div>
             </div>
             <button type="button" id="add-blank" class="btn-small">+ Boşluk Ekle</button>
-            
+
             <label style="margin-top: 20px;">Karıştırıcı Seçenekler (Sürükle-bırak için)</label>
             <div id="distractor-options" class="distractor-options">
               <input type="text" class="distractor" placeholder="Yanlış seçenek 1">
@@ -235,77 +295,7 @@
             </div>
             <button type="button" id="add-distractor" class="btn-small">+ Seçenek Ekle</button>
           </div>
-          
-          <!-- Duel Options (Kapışma 2'li) - Çoktan seçmeli gibi -->
-          <div id="duel-options" class="form-group hidden">
-            <div class="duel-info">
-              <i data-lucide="info" class="info-icon"></i>
-              <p>Bu soru 2 oyuncu arasında kapışma modunda sorulacak. İlk doğru cevaplayan puan kazanır.</p>
-            </div>
-            <label>Şıklar</label>
-            <div class="options-container">
-              <div class="option-input">
-                <span class="option-letter">A</span>
-                <input type="text" id="duel-option-a" placeholder="A şıkkı">
-                <input type="radio" name="duel-correct" value="A" checked>
-                <span class="radio-label">Doğru</span>
-              </div>
-              <div class="option-input">
-                <span class="option-letter">B</span>
-                <input type="text" id="duel-option-b" placeholder="B şıkkı">
-                <input type="radio" name="duel-correct" value="B">
-                <span class="radio-label">Doğru</span>
-              </div>
-              <div class="option-input">
-                <span class="option-letter">C</span>
-                <input type="text" id="duel-option-c" placeholder="C şıkkı">
-                <input type="radio" name="duel-correct" value="C">
-                <span class="radio-label">Doğru</span>
-              </div>
-              <div class="option-input">
-                <span class="option-letter">D</span>
-                <input type="text" id="duel-option-d" placeholder="D şıkkı">
-                <input type="radio" name="duel-correct" value="D">
-                <span class="radio-label">Doğru</span>
-              </div>
-            </div>
-          </div>
-          
-          <!-- Group Duel Options (Kapışma Birlikte) - Çoktan seçmeli gibi -->
-          <div id="group-duel-options" class="form-group hidden">
-            <div class="duel-info group">
-              <i data-lucide="users" class="info-icon"></i>
-              <p>Bu soru tüm oyunculara aynı anda sorulacak. Herkese aynı süre verilir.</p>
-            </div>
-            <label>Şıklar</label>
-            <div class="options-container">
-              <div class="option-input">
-                <span class="option-letter">A</span>
-                <input type="text" id="group-option-a" placeholder="A şıkkı">
-                <input type="radio" name="group-correct" value="A" checked>
-                <span class="radio-label">Doğru</span>
-              </div>
-              <div class="option-input">
-                <span class="option-letter">B</span>
-                <input type="text" id="group-option-b" placeholder="B şıkkı">
-                <input type="radio" name="group-correct" value="B">
-                <span class="radio-label">Doğru</span>
-              </div>
-              <div class="option-input">
-                <span class="option-letter">C</span>
-                <input type="text" id="group-option-c" placeholder="C şıkkı">
-                <input type="radio" name="group-correct" value="C">
-                <span class="radio-label">Doğru</span>
-              </div>
-              <div class="option-input">
-                <span class="option-letter">D</span>
-                <input type="text" id="group-option-d" placeholder="D şıkkı">
-                <input type="radio" name="group-correct" value="D">
-                <span class="radio-label">Doğru</span>
-              </div>
-            </div>
-          </div>
-          
+
           <!-- Matching Options (Eşleme) -->
           <div id="matching-options" class="form-group hidden">
             <div class="matching-info">
@@ -335,7 +325,7 @@
             </div>
             <button type="button" id="add-matching-pair" class="btn-small">+ Çift Ekle</button>
           </div>
-          
+
           <!-- Drag Drop Options (Sürükle Bırak) -->
           <div id="drag-drop-options" class="form-group hidden">
             <div class="drag-drop-info">
@@ -347,7 +337,7 @@
               <button type="button" class="drag-type-btn active" data-drag-type="order">Sıralama</button>
               <button type="button" class="drag-type-btn" data-drag-type="category">Kategorileme</button>
             </div>
-            
+
             <div id="drag-order-options">
               <label>Doğru Sırayla Öğeler</label>
               <div id="drag-items" class="drag-items">
@@ -369,7 +359,7 @@
               </div>
               <button type="button" id="add-drag-item" class="btn-small">+ Öğe Ekle</button>
             </div>
-            
+
             <div id="drag-category-options" class="hidden">
               <label>Kategoriler</label>
               <div id="drag-categories" class="drag-categories">
@@ -393,17 +383,18 @@
               <button type="button" id="add-category" class="btn-small">+ Kategori Ekle</button>
             </div>
           </div>
-          
+
           <!-- Application Options (Uygulama) -->
           <div id="application-options" class="form-group hidden">
             <div class="application-info">
               <i data-lucide="flask-conical" class="info-icon"></i>
               <p>Yarışmacı gerçek hayatta bir uygulama yapacak. Süre bitiminde doğru/yanlış kontrolü yapılacak.</p>
             </div>
-            
+
             <label>Uygulama Açıklaması</label>
-            <textarea id="application-instructions" rows="3" placeholder="Yarışmacının yapması gereken uygulamayı detaylı açıklayın...">Parçaları kullanarak devreyi oluştur.</textarea>
-            
+            <textarea id="application-instructions" rows="3"
+              placeholder="Yarışmacının yapması gereken uygulamayı detaylı açıklayın...">Parçaları kullanarak devreyi oluştur.</textarea>
+
             <label>Kontrol Görseli (Doğru Uygulama)</label>
             <div class="image-upload-container">
               <input type="file" id="application-image-file" accept="image/*" class="hidden">
@@ -416,11 +407,12 @@
               </div>
             </div>
             <input type="hidden" id="application-image-data">
-            
+
             <label>Kontrol Açıklaması</label>
-            <textarea id="application-check-text" rows="2" placeholder="Doğru uygulamanın nasıl görünmesi gerektiğini açıklayın..."></textarea>
+            <textarea id="application-check-text" rows="2"
+              placeholder="Doğru uygulamanın nasıl görünmesi gerektiğini açıklayın..."></textarea>
           </div>
-          
+
           <!-- Bilgi Bölümü (Tüm soru tipleri için opsiyonel) -->
           <div class="form-group info-section">
             <div class="info-toggle">
@@ -434,10 +426,11 @@
             <div id="info-content" class="info-content hidden">
               <label>Bilgi Başlığı (Opsiyonel)</label>
               <input type="text" id="info-title" placeholder="Örn: Biliyor muydunuz?">
-              
+
               <label>Bilgi İçeriği</label>
-              <textarea id="info-text" rows="4" placeholder="Soruyla ilgili ek bilgi, açıklama veya ilginç faktörler..."></textarea>
-              
+              <textarea id="info-text" rows="4"
+                placeholder="Soruyla ilgili ek bilgi, açıklama veya ilginç faktörler..."></textarea>
+
               <label>Bilgi Resmi (Opsiyonel)</label>
               <div class="info-image-upload">
                 <input type="text" id="info-image-url" placeholder="Resim URL'si girin veya dosya yükleyin">
@@ -451,7 +444,7 @@
                 <img id="info-preview-img" src="" alt="Önizleme">
                 <button type="button" id="remove-info-image" class="remove-image-btn">&times;</button>
               </div>
-              
+
               <!-- AR Animasyon Bölümü -->
               <div class="ar-section">
                 <label>
@@ -459,7 +452,7 @@
                   AR Animasyonu (Opsiyonel)
                 </label>
                 <small>Artırılmış gerçeklik ile 3D animasyon göstermek için model ekleyin</small>
-                
+
                 <!-- AR Marker Seçimi -->
                 <div class="ar-marker-section">
                   <label>AR Marker Tipi</label>
@@ -498,14 +491,15 @@
                         <li>İndirilen .patt dosyasını buraya yükleyin</li>
                         <li>İndirilen resmi yazdırıp marker olarak kullanın</li>
                       </ol>
-                      <a href="https://ar-js-org.github.io/AR.js/three.js/examples/marker-training/examples/generator.html" target="_blank">
+                      <a href="https://ar-js-org.github.io/AR.js/three.js/examples/marker-training/examples/generator.html"
+                        target="_blank">
                         <i data-lucide="external-link"></i>
                         Marker Oluşturma Aracı
                       </a>
                     </div>
                   </div>
                 </div>
-                
+
                 <div class="ar-model-selector">
                   <label>Animasyon Tipi</label>
                   <select id="ar-animation-type">
@@ -519,27 +513,29 @@
                     <option value="custom-aframe">Özel A-Frame Kodu</option>
                   </select>
                 </div>
-                
+
                 <div id="custom-ar-model" class="custom-ar-model hidden">
                   <label>Model Başlığı</label>
                   <input type="text" id="ar-model-title" placeholder="Örn: Ampul Modeli">
-                  
+
                   <label>Model Açıklaması</label>
                   <input type="text" id="ar-model-description" placeholder="Örn: Elektrik ampulünün 3D görünümü">
-                  
+
                   <label>3D Model Dosyası (.glb/.gltf)</label>
                   <div class="model-upload-area">
                     <input type="file" id="ar-model-file" accept=".glb,.gltf" style="display: none;">
-                    <button type="button" class="btn-upload-model" onclick="document.getElementById('ar-model-file').click()">
+                    <button type="button" class="btn-upload-model"
+                      onclick="document.getElementById('ar-model-file').click()">
                       <i data-lucide="upload"></i> Model Dosyası Yükle
                     </button>
                     <span id="model-filename" class="model-filename"></span>
                   </div>
                   <div class="model-url-divider">veya URL ile</div>
                   <input type="text" id="ar-model-url" placeholder="https://example.com/model.glb">
-                  <small>Ücretsiz modeller: <a href="https://sketchfab.com" target="_blank">Sketchfab</a>, <a href="https://poly.pizza" target="_blank">Poly Pizza</a></small>
+                  <small>Ücretsiz modeller: <a href="https://sketchfab.com" target="_blank">Sketchfab</a>, <a
+                      href="https://poly.pizza" target="_blank">Poly Pizza</a></small>
                 </div>
-                
+
                 <div id="custom-aframe-code" class="custom-aframe-code hidden">
                   <label>A-Frame HTML Kodu</label>
                   <textarea id="ar-aframe-code" rows="10" placeholder="<!-- A-Frame entity kodunuzu buraya yazın -->
@@ -563,7 +559,7 @@
                     </a>
                   </div>
                 </div>
-                
+
                 <div id="ar-preview" class="ar-preview hidden">
                   <button type="button" id="ar-preview-btn" class="ar-preview-btn">
                     <i data-lucide="smartphone"></i>
@@ -573,7 +569,7 @@
               </div>
             </div>
           </div>
-          
+
           <div class="form-actions">
             <button type="submit" class="btn-primary">
               <span id="submit-btn-text">Soru Ekle</span>
@@ -589,7 +585,7 @@
           <h2>QR Kodları</h2>
           <p>Soruların QR kodlarını özelleştirin ve indirin</p>
         </div>
-        
+
         <div class="qr-settings-card">
           <h3>QR Kod Ayarları</h3>
           <div class="qr-settings-row">
@@ -604,7 +600,8 @@
             <div class="qr-setting">
               <label>Logo/Resim</label>
               <input type="file" id="qr-logo" accept="image/*" class="hidden">
-              <button type="button" id="upload-qr-logo-btn" class="btn-small"><i data-lucide="image" class="btn-icon-svg"></i> Logo Ekle</button>
+              <button type="button" id="upload-qr-logo-btn" class="btn-small"><i data-lucide="image"
+                  class="btn-icon-svg"></i> Logo Ekle</button>
               <button type="button" id="remove-qr-logo-btn" class="btn-small hidden">✕ Kaldır</button>
             </div>
             <div class="qr-setting">
@@ -632,11 +629,13 @@
           </div>
           <div class="qr-actions">
             <button id="refresh-qr-btn" class="btn-primary">🔄 QR Kodları Güncelle</button>
-            <button id="download-all-qr-btn" class="btn-primary"><i data-lucide="download" class="btn-icon-svg"></i> Tümünü İndir (ZIP)</button>
-            <button id="download-pdf-btn" class="btn-primary"><i data-lucide="file-text" class="btn-icon-svg"></i> PDF İndir (A4 - 65mm)</button>
+            <button id="download-all-qr-btn" class="btn-primary"><i data-lucide="download" class="btn-icon-svg"></i>
+              Tümünü İndir (ZIP)</button>
+            <button id="download-pdf-btn" class="btn-primary"><i data-lucide="file-text" class="btn-icon-svg"></i> PDF
+              İndir (A4 - 65mm)</button>
           </div>
         </div>
-        
+
         <div id="qr-list" class="qr-list">
           <!-- Dinamik olarak eklenecek -->
         </div>
@@ -648,7 +647,7 @@
           <h2>Veri Yönetimi</h2>
           <p>Soruları ve görselleri içe/dışa aktarın</p>
         </div>
-        
+
         <div class="import-export-container">
           <div class="export-card">
             <div class="card-icon"><i data-lucide="upload" class="card-icon-svg"></i></div>
@@ -656,7 +655,7 @@
             <p>Tüm soruları ve görselleri JSON dosyası olarak indirin</p>
             <button id="export-btn" class="btn-primary">Verileri İndir</button>
           </div>
-          
+
           <div class="import-card">
             <div class="card-icon"><i data-lucide="download" class="card-icon-svg"></i></div>
             <h3>İçe Aktar</h3>
@@ -665,7 +664,7 @@
             <button id="import-btn" class="btn-primary">Dosya Seç</button>
             <div id="import-status" class="import-status hidden"></div>
           </div>
-          
+
           <div class="migrate-card">
             <div class="card-icon"><i data-lucide="image" class="card-icon-svg"></i></div>
             <h3>Resimleri Taşı</h3>
@@ -673,7 +672,7 @@
             <button id="migrate-images-btn" class="btn-primary">Resimleri Aktar</button>
             <div id="migrate-status" class="import-status hidden"></div>
           </div>
-          
+
           <div class="clear-card">
             <i data-lucide="trash-2" class="card-icon-svg danger-icon"></i>
             <h3>Verileri Temizle</h3>
@@ -688,7 +687,7 @@
         <div class="section-header">
           <h2>Oyun Ayarları</h2>
         </div>
-        
+
         <div class="settings-container">
           <div class="settings-card">
             <i data-lucide="target" class="card-icon-svg"></i>
@@ -703,6 +702,78 @@
             </button>
             <div id="settings-status" class="settings-status hidden"></div>
           </div>
+        </div>
+      </section>
+
+      <!-- Sounds Section -->
+      <section id="sounds-section" class="section">
+        <div class="section-header">
+          <h2>Ses Yönetimi</h2>
+          <p>Oyun ses efektlerini ve müziklerini yönetin</p>
+        </div>
+
+        <div class="info-banner">
+          <i data-lucide="info" class="banner-icon-svg"></i>
+          <h4 class="info-title">Bilgilendirme</h4>
+          <div class="info-content">
+            <p><strong>Ses Formatları:</strong> MP3, WAV, OGG dosyaları desteklenir (Max 5MB)</p>
+            <p><strong>Varsayılan Sesler:</strong> Ses yüklemediğiniz tiplerde Web Audio API ile dinamik sesler üretilir</p>
+          </div>
+        </div>
+
+        <div class="sounds-grid" id="sounds-grid">
+          <!-- Dinamik olarak yüklenecek -->
+        </div>
+      </section>
+
+      <!-- Change Password Section -->
+      <section id="change-password-section" class="section">
+        <div class="section-header">
+          <h2>Şifre Değiştir</h2>
+          <p>Admin paneli şifrenizi değiştirin</p>
+        </div>
+
+        <div class="password-change-form">
+          <form id="password-form">
+            <div class="form-group">
+              <label for="current-password">Mevcut Şifre</label>
+              <div class="password-input-group">
+                <input type="password" id="current-password" name="current-password" required placeholder="Mevcut şifrenizi girin">
+                <button type="button" class="toggle-password-btn" data-target="current-password">
+                  <i data-lucide="eye" class="eye-icon"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="new-password">Yeni Şifre</label>
+              <div class="password-input-group">
+                <input type="password" id="new-password" name="new-password" required placeholder="Yeni şifrenizi girin (min. 6 karakter)">
+                <button type="button" class="toggle-password-btn" data-target="new-password">
+                  <i data-lucide="eye" class="eye-icon"></i>
+                </button>
+              </div>
+              <small>En az 6 karakter olmalıdır</small>
+            </div>
+
+            <div class="form-group">
+              <label for="confirm-password">Yeni Şifreyi Onayla</label>
+              <div class="password-input-group">
+                <input type="password" id="confirm-password" name="confirm-password" required placeholder="Yeni şifrenizi tekrar girin">
+                <button type="button" class="toggle-password-btn" data-target="confirm-password">
+                  <i data-lucide="eye" class="eye-icon"></i>
+                </button>
+              </div>
+            </div>
+
+            <div id="password-error" class="error-message" style="display: none;"></div>
+            <div id="password-success" class="success-message" style="display: none;"></div>
+
+            <div class="form-buttons">
+              <button type="submit" class="btn-primary" id="change-password-btn">Şifre Değiştir</button>
+              <button type="reset" class="btn-secondary">Temizle</button>
+            </div>
+          </form>
         </div>
       </section>
     </main>
@@ -720,9 +791,10 @@
     </div>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="admin.js"></script>
+  <script src="/libs/jszip.min.js"></script>
+  <script src="/libs/qrcode.min.js"></script>
+  <script src="/libs/jspdf.umd.min.js"></script>
+  <script src="admin.js?v=18"></script>
 </body>
+
 </html>

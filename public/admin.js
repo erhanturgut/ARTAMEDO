@@ -3,19 +3,33 @@ let questions = [];
 let editingQuestionId = null;
 let deleteQuestionId = null;
 let currentType = 'multiple';
+let currentMode = 'normal';
 let currentTrueFalseAnswer = 'true';
 let currentImageData = null;
 let qrLogoData = null;
 let qrCodesCache = {};
 let currentQuestionFilter = '';
 
-// DOM Elements
-const navItems = document.querySelectorAll('.nav-item[data-section]');
-const sections = document.querySelectorAll('.section');
-const questionsList = document.getElementById('questions-list');
-const qrList = document.getElementById('qr-list');
-const questionForm = document.getElementById('question-form');
-const deleteModal = document.getElementById('delete-modal');
+// Login State
+let isLoggedIn = false;
+const SESSION_KEY = 'adminSession';
+const PASSWORD_KEY = 'adminPassword';
+
+// DOM Elements (will be initialized after login)
+let navItems;
+let sections;
+let questionsList;
+let qrList;
+let questionForm;
+let deleteModal;
+
+// Login Elements
+const loginScreen = document.getElementById('login-screen');
+const loginForm = document.getElementById('login-form');
+const passwordInput = document.getElementById('password-input');
+const togglePasswordBtn = document.getElementById('toggle-password');
+const rememberCheckbox = document.getElementById('remember-password');
+const loginError = document.getElementById('login-error');
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -24,17 +38,215 @@ document.addEventListener('DOMContentLoaded', () => {
     lucide.createIcons();
   }
   
+  // Check login state
+  setupLoginSystem();
+  
+  // Eğer giriş yapıldıysa admin panelini yükle
+  if (isLoggedIn) {
+    setupAdminPanel();
+  }
+});
+
+// Login System
+function setupLoginSystem() {
+  // Session'dan giriş bilgilerini kontrol et
+  const session = sessionStorage.getItem(SESSION_KEY);
+  if (session === 'true') {
+    isLoggedIn = true;
+    hideLoginScreen();
+    return;
+  }
+  
+  // localStorage'dan hatırlanmış şifreyi kontrol et
+  const rememberedPassword = localStorage.getItem(PASSWORD_KEY);
+  if (rememberedPassword) {
+    passwordInput.value = rememberedPassword;
+    rememberCheckbox.checked = true;
+    // Otomatik login denemesi
+    autoLogin(rememberedPassword);
+  }
+  
+  // Login form event listeners
+  loginForm.addEventListener('submit', handleLogin);
+  togglePasswordBtn.addEventListener('click', togglePasswordVisibility);
+}
+
+function togglePasswordVisibility() {
+  const isPassword = passwordInput.type === 'password';
+  passwordInput.type = isPassword ? 'text' : 'password';
+  
+  // Icon değiştir
+  const icon = togglePasswordBtn.querySelector('.eye-icon');
+  if (isPassword) {
+    icon.setAttribute('data-lucide', 'eye-off');
+  } else {
+    icon.setAttribute('data-lucide', 'eye');
+  }
+  if (typeof lucide !== 'undefined') {
+    lucide.createIcons();
+  }
+}
+
+function handleLogin(e) {
+  e.preventDefault();
+  
+  const password = passwordInput.value.trim();
+  if (!password) {
+    showLoginError('Lütfen şifre girin');
+    return;
+  }
+  
+  // Server'a login request gönder
+  const button = loginForm.querySelector('button[type="submit"]');
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Kontrol ediliyor...';
+  
+  fetch('/api/admin/login', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ password })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      isLoggedIn = true;
+      sessionStorage.setItem(SESSION_KEY, 'true');
+      
+      // Remember password if checked
+      if (rememberCheckbox.checked) {
+        localStorage.setItem(PASSWORD_KEY, password);
+      } else {
+        localStorage.removeItem(PASSWORD_KEY);
+      }
+      
+      hideLoginScreen();
+      setupAdminPanel();
+    } else {
+      showLoginError(data.error || 'Şifre hatalı');
+      passwordInput.focus();
+    }
+  })
+  .catch(error => {
+    console.error('Login hatası:', error);
+    showLoginError('Bağlantı hatası. Lütfen tekrar deneyin.');
+  })
+  .finally(() => {
+    button.disabled = false;
+    button.textContent = originalText;
+  });
+}
+
+function autoLogin(password) {
+  fetch('/api/admin/login', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ password })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      isLoggedIn = true;
+      sessionStorage.setItem(SESSION_KEY, 'true');
+      hideLoginScreen();
+      setupAdminPanel();
+    } else {
+      // Hatırlanmış şifre hatalıysa temizle
+      localStorage.removeItem(PASSWORD_KEY);
+      passwordInput.value = '';
+      rememberCheckbox.checked = false;
+      showLoginScreen();
+    }
+  })
+  .catch(error => {
+    console.error('Auto login hatası:', error);
+    showLoginScreen();
+  });
+}
+
+function showLoginError(message) {
+  loginError.textContent = message;
+  loginError.classList.remove('hidden');
+  loginError.classList.add('show');
+}
+
+function hideLoginError() {
+  loginError.classList.add('hidden');
+  loginError.classList.remove('show');
+}
+
+function hideLoginScreen() {
+  loginScreen.classList.add('hidden');
+}
+
+function showLoginScreen() {
+  loginScreen.classList.remove('hidden');
+}
+
+// Setup Admin Panel
+function setupAdminPanel() {
+  // Initialize DOM Elements
+  navItems = document.querySelectorAll('.nav-item[data-section]');
+  sections = document.querySelectorAll('.section');
+  questionsList = document.getElementById('questions-list');
+  qrList = document.getElementById('qr-list');
+  questionForm = document.getElementById('question-form');
+  deleteModal = document.getElementById('delete-modal');
+  
   // Setup fullscreen
   setupFullscreen();
   
   // Otomatik tam ekran aç (ilk kullanıcı etkileşiminde)
   autoEnterFullscreen();
   
+  // Sidebar'a logout butonu ekle
+  addLogoutButton();
+  
   loadQuestions();
   loadSettings();
   loadQRSettings();
   setupEventListeners();
-});
+}
+
+function addLogoutButton() {
+  const sidebar = document.querySelector('.sidebar');
+  const navMenu = sidebar.querySelector('.nav-menu');
+  
+  // Eğer zaten varsa kaldır
+  const existingLogout = sidebar.querySelector('.logout-btn');
+  if (existingLogout) {
+    existingLogout.remove();
+  }
+  
+  // Logout butonu ekle
+  const logoutBtn = document.createElement('button');
+  logoutBtn.className = 'logout-btn';
+  logoutBtn.innerHTML = '<i data-lucide="log-out" class="logout-icon"></i> Çıkış Yap';
+  logoutBtn.addEventListener('click', handleLogout);
+  
+  sidebar.appendChild(logoutBtn);
+  
+  if (typeof lucide !== 'undefined') {
+    lucide.createIcons();
+  }
+}
+
+function handleLogout() {
+  isLoggedIn = false;
+  sessionStorage.removeItem(SESSION_KEY);
+  
+  // Şifreyi hatırlamıyorsa temizle
+  if (!rememberCheckbox.checked) {
+    localStorage.removeItem(PASSWORD_KEY);
+  }
+  
+  // Sayfayı yenile
+  location.reload();
+}
 
 // Fullscreen functionality
 function setupFullscreen() {
@@ -150,6 +362,16 @@ function setupEventListeners() {
       btn.classList.add('active');
       currentType = btn.dataset.type;
       updateFormForType();
+    });
+  });
+
+  // Mode selector
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentMode = btn.dataset.mode;
+      updateModeHint();
     });
   });
   
@@ -302,15 +524,49 @@ function setupEventListeners() {
   if (saveBtn) {
     saveBtn.addEventListener('click', saveSettings);
   }
+  
+  // Password Change Form
+  const passwordForm = document.getElementById('password-form');
+  if (passwordForm) {
+    // Toggle password visibility buttons
+    document.querySelectorAll('.toggle-password-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const targetId = btn.dataset.target;
+        const input = document.getElementById(targetId);
+        const eyeIcon = btn.querySelector('.eye-icon');
+        
+        if (input.type === 'password') {
+          input.type = 'text';
+          eyeIcon.setAttribute('data-lucide', 'eye-off');
+        } else {
+          input.type = 'password';
+          eyeIcon.setAttribute('data-lucide', 'eye');
+        }
+        
+        if (typeof lucide !== 'undefined') {
+          lucide.createIcons();
+        }
+      });
+    });
+    
+    // Password form submit
+    passwordForm.addEventListener('submit', handlePasswordChange);
+  }
 }
 
 // Show Section
-function showSection(sectionId) {
+function showSection(sectionId, options = {}) {
   sections.forEach(section => section.classList.remove('active'));
   document.getElementById(`${sectionId}-section`).classList.add('active');
   
   if (sectionId === 'qr-codes') {
     loadQRCodes();
+  } else if (sectionId === 'add-question') {
+    // Reset form when switching to add question section (skip when editing)
+    if (!options.skipReset) {
+      resetForm();
+    }
   }
 }
 
@@ -320,8 +576,6 @@ function updateFormForType() {
   document.getElementById('multiple-options').classList.add('hidden');
   document.getElementById('truefalse-options').classList.add('hidden');
   document.getElementById('fillblank-options').classList.add('hidden');
-  document.getElementById('duel-options').classList.add('hidden');
-  document.getElementById('group-duel-options').classList.add('hidden');
   document.getElementById('matching-options').classList.add('hidden');
   document.getElementById('drag-drop-options').classList.add('hidden');
   document.getElementById('application-options').classList.add('hidden');
@@ -335,10 +589,6 @@ function updateFormForType() {
   } else if (currentType === 'fillblank') {
     document.getElementById('fillblank-options').classList.remove('hidden');
     document.querySelector('.fillblank-hint').classList.remove('hidden');
-  } else if (currentType === 'duel') {
-    document.getElementById('duel-options').classList.remove('hidden');
-  } else if (currentType === 'battle') {
-    document.getElementById('group-duel-options').classList.remove('hidden');
   } else if (currentType === 'matching') {
     document.getElementById('matching-options').classList.remove('hidden');
   } else if (currentType === 'drag_drop') {
@@ -346,6 +596,17 @@ function updateFormForType() {
   } else if (currentType === 'application') {
     document.getElementById('application-options').classList.remove('hidden');
   }
+}
+
+function updateModeHint() {
+  const hint = document.getElementById('mode-hint');
+  if (!hint) return;
+  const hints = {
+    normal: 'Normal modda soru tipine göre standart akış kullanılır.',
+    duel: 'Kapışma 2\'li modunda seçtiğiniz soru tipi kullanılacaktır.',
+    group_duel: 'Kapışma Hep Birlikte modunda seçtiğiniz soru tipi kullanılacaktır.'
+  };
+  hint.textContent = hints[currentMode] || hints.normal;
 }
 
 // Add Blank Input
@@ -790,10 +1051,16 @@ function renderQuestionStats() {
     truefalse: 'Doğru/Yanlış',
     fillblank: 'Boşluk Doldurma',
     duel: 'Kapışma 2\'li',
-    battle: 'Kapışma Birlikte',
+    group_duel: 'Kapışma Hep Birlikte',
     matching: 'Eşleme',
     drag_drop: 'Sürükle Bırak',
     application: 'Uygulama'
+  };
+
+  const modeLabels = {
+    normal: 'Normal',
+    duel: 'Kapışma 2\'li',
+    group_duel: 'Kapışma Hep Birlikte'
   };
   
   const typeIcons = {
@@ -801,7 +1068,7 @@ function renderQuestionStats() {
     truefalse: 'check-circle',
     fillblank: 'text-cursor-input',
     duel: 'swords',
-    battle: 'users',
+    group_duel: 'users',
     matching: 'link',
     drag_drop: 'move',
     application: 'cpu'
@@ -812,7 +1079,7 @@ function renderQuestionStats() {
     truefalse: '#10b981',
     fillblank: '#f59e0b',
     duel: '#ef4444',
-    battle: '#8b5cf6',
+    group_duel: '#8b5cf6',
     matching: '#06b6d4',
     drag_drop: '#ec4899',
     application: '#6366f1'
@@ -821,7 +1088,8 @@ function renderQuestionStats() {
   // Count questions by type
   const typeCounts = {};
   questions.forEach(q => {
-    typeCounts[q.type] = (typeCounts[q.type] || 0) + 1;
+    const normalizedType = q.type === 'battle' ? 'group_duel' : q.type;
+    typeCounts[normalizedType] = (typeCounts[normalizedType] || 0) + 1;
   });
   
   const totalCount = questions.length;
@@ -885,7 +1153,10 @@ function renderQuestions() {
   let filtered = questions;
   
   if (currentQuestionFilter) {
-    filtered = filtered.filter(q => q.type === currentQuestionFilter);
+    filtered = filtered.filter(q => {
+      const normalizedType = q.type === 'battle' ? 'group_duel' : q.type;
+      return normalizedType === currentQuestionFilter;
+    });
   }
   
   if (filtered.length === 0) {
@@ -905,19 +1176,35 @@ function renderQuestions() {
     truefalse: 'Doğru/Yanlış',
     fillblank: 'Boşluk Doldurma',
     duel: 'Kapışma 2\'li',
-    battle: 'Kapışma Birlikte',
+    group_duel: 'Kapışma Hep Birlikte',
     matching: 'Eşleme',
     drag_drop: 'Sürükle Bırak',
     application: 'Uygulama'
   };
+
+  const modeLabels = {
+    normal: 'Normal',
+    duel: 'Kapışma 2\'li',
+    group_duel: 'Kapışma Hep Birlikte'
+  };
   
-  questionsList.innerHTML = filtered.map(q => `
+  questionsList.innerHTML = filtered.map(q => {
+    const normalizedType = q.type === 'battle' ? 'group_duel' : q.type;
+    const mode = q.mode || (normalizedType === 'duel' || normalizedType === 'group_duel' ? normalizedType : 'normal');
+    const baseType = q.base_type || (mode !== 'normal' ? 'application' : q.type);
+    const modeBadge = mode !== 'normal'
+      ? `<span class="meta-badge badge-type">${modeLabels[mode] || mode}</span>`
+      : '';
+    const typeBadge = `<span class="meta-badge badge-type">${typeLabels[baseType] || baseType}</span>`;
+
+    return `
     <div class="question-item" data-id="${q.id}">
       <div class="question-qr">QR: ${q.qr_code}</div>
       <div class="question-info">
         <h4>${q.question_text.substring(0, 100)}${q.question_text.length > 100 ? '...' : ''}</h4>
         <div class="question-meta">
-          <span class="meta-badge badge-type">${typeLabels[q.type] || q.type}</span>
+          ${modeBadge}
+          ${typeBadge}
           <span class="meta-badge badge-easy">+${q.correct_steps || 3} adım</span>
           <span class="meta-badge badge-hard">-${q.wrong_steps || 1} adım</span>
           ${q.time_limit ? `<span class="meta-badge badge-time">⏱ ${q.time_limit}sn</span>` : ''}
@@ -925,10 +1212,15 @@ function renderQuestions() {
       </div>
       <div class="question-actions">
         <button class="action-btn edit" onclick="editQuestion('${q.id}')"><i data-lucide="pencil"></i></button>
+        ${q.type !== 'duel' && q.type !== 'group_duel' ? `
+          <button class="action-btn copy copy-duel" onclick="copyToDuel('${q.id}')" title="Kapışma 2'li olarak kopyala"><i data-lucide="copy"></i></button>
+          <button class="action-btn copy copy-group-duel" onclick="copyToGroupDuel('${q.id}')" title="Kapışma Hep Birlikte olarak kopyala"><i data-lucide="users"></i></button>
+        ` : ''}
         <button class="action-btn delete" onclick="deleteQuestion('${q.id}')"><i data-lucide="trash-2"></i></button>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
   
   // Re-initialize Lucide icons for dynamically added content
   if (typeof lucide !== 'undefined') lucide.createIcons();
@@ -986,22 +1278,6 @@ async function handleSubmit(e) {
       options: [...blankAnswers, ...distractors]
     };
     correctAnswer = blankAnswers.join(',');
-  } else if (currentType === 'duel') {
-    options = [
-      document.getElementById('duel-option-a').value.trim(),
-      document.getElementById('duel-option-b').value.trim(),
-      document.getElementById('duel-option-c').value.trim(),
-      document.getElementById('duel-option-d').value.trim()
-    ];
-    correctAnswer = document.querySelector('input[name="duel-correct"]:checked').value;
-  } else if (currentType === 'battle') {
-    options = [
-      document.getElementById('group-option-a').value.trim(),
-      document.getElementById('group-option-b').value.trim(),
-      document.getElementById('group-option-c').value.trim(),
-      document.getElementById('group-option-d').value.trim()
-    ];
-    correctAnswer = document.querySelector('input[name="group-correct"]:checked').value;
   } else if (currentType === 'matching') {
     matchingPairs = Array.from(document.querySelectorAll('.matching-pair')).map(pair => ({
       left: pair.querySelector('.match-left').value.trim(),
@@ -1031,9 +1307,15 @@ async function handleSubmit(e) {
       checkText: document.getElementById('application-check-text').value.trim()
     };
   }
+
+  const normalizedMode = currentMode === 'battle' ? 'group_duel' : currentMode;
+  const dataType = normalizedMode === 'normal' ? currentType : normalizedMode;
+  const baseType = normalizedMode === 'normal' ? null : currentType;
   
   const data = {
-    type: currentType,
+    type: dataType,
+    mode: normalizedMode,
+    base_type: baseType,
     correct_steps: correctSteps,
     wrong_steps: wrongSteps,
     time_limit: timeLimit,
@@ -1116,7 +1398,7 @@ function editQuestion(id) {
   editingQuestionId = id;
   
   // Show add question section
-  showSection('add-question');
+  showSection('add-question', { skipReset: true });
   document.querySelector('.nav-item[data-section="add-question"]').classList.add('active');
   document.querySelector('.nav-item[data-section="questions"]').classList.remove('active');
   
@@ -1126,7 +1408,17 @@ function editQuestion(id) {
   document.getElementById('cancel-edit').classList.remove('hidden');
   
   // Set type
-  currentType = question.type;
+  const storedMode = question.mode || (question.type === 'duel' || question.type === 'group_duel' || question.type === 'battle'
+    ? (question.type === 'battle' ? 'group_duel' : question.type)
+    : 'normal');
+  currentMode = storedMode;
+  currentType = question.base_type || (storedMode !== 'normal' ? 'application' : question.type);
+
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === currentMode);
+  });
+  updateModeHint();
+
   document.querySelectorAll('.type-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.type === currentType);
   });
@@ -1203,6 +1495,37 @@ function editQuestion(id) {
       input.placeholder = `Yanlış seçenek ${index + 1}`;
       distractorContainer.appendChild(input);
     });
+    
+    // Clear matching pairs if editing from different type
+    const matchingClear = document.getElementById('matching-pairs');
+    if (matchingClear) matchingClear.innerHTML = '';
+  } else if (question.type === 'matching') {
+    // Load matching pairs data
+    const pairsContainer = document.getElementById('matching-pairs');
+    pairsContainer.innerHTML = '';
+    
+    if (question.matching_pairs && Array.isArray(question.matching_pairs)) {
+      question.matching_pairs.forEach((pair) => {
+        const div = document.createElement('div');
+        div.className = 'matching-pair';
+        div.innerHTML = `
+          <input type="text" class="match-left" value="${pair.left || ''}" placeholder="Sol öğe">
+          <span class="match-arrow">↔</span>
+          <input type="text" class="match-right" value="${pair.right || ''}" placeholder="Sağ eşi">
+          <button type="button" class="btn-remove-pair">✕</button>
+        `;
+        pairsContainer.appendChild(div);
+      });
+    }
+    
+    // Attach event listeners to remove buttons
+    document.querySelectorAll('.btn-remove-pair').forEach(btn => {
+      btn.addEventListener('click', (e) => e.target.closest('.matching-pair').remove());
+    });
+  } else {
+    // Clear matching pairs if editing from different type
+    const matchingClear = document.getElementById('matching-pairs');
+    if (matchingClear) matchingClear.innerHTML = '';
   }
   
   // Load application data
@@ -1308,6 +1631,121 @@ function editQuestion(id) {
   }
 }
 
+// Duel olarak kopyala (4000-4999 arası)
+async function copyToDuel(sourceId) {
+  try {
+    const sourceQuestion = questions.find(q => q.id === sourceId);
+    if (!sourceQuestion) return;
+    
+    // Yeni QR kodu hesapla (4000-4999 arası)
+    const sourceQR = parseInt(sourceQuestion.qr_code);
+    let newQR = 4000 + (sourceQR % 1000);
+    
+    // QR'ın zaten kullanılıp kullanılmadığını kontrol et
+    while (questions.some(q => q.qr_code === newQR.toString())) {
+      newQR++;
+      if (newQR > 4999) newQR = 4000;
+    }
+    
+    // Yeni soru oluştur
+    const baseType = sourceQuestion.base_type || (sourceQuestion.type === 'duel' || sourceQuestion.type === 'group_duel' || sourceQuestion.type === 'battle'
+      ? 'application'
+      : sourceQuestion.type);
+
+    const newQuestion = {
+      ...sourceQuestion,
+      id: undefined, // Yeni ID oluşturulacak
+      type: 'duel',
+      mode: 'duel',
+      base_type: baseType,
+      qr_code: newQR.toString(),
+      created_at: new Date().toISOString()
+    };
+    
+    const response = await fetch('/api/questions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newQuestion)
+    });
+    
+    if (response.ok) {
+      alert(`Kapışma 2'li olarak kopyalandı! QR: ${newQR}`);
+      loadQuestions();
+    }
+  } catch (error) {
+    console.error('Kopyalama hatası:', error);
+    alert('Kopyalama başarısız oldu!');
+  }
+}
+
+// Group Duel olarak kopyala (5000-5999 arası)
+async function copyToGroupDuel(sourceId) {
+  try {
+    const sourceQuestion = questions.find(q => q.id === sourceId);
+    if (!sourceQuestion) {
+      console.error('Kaynak soru bulunamadı:', sourceId);
+      alert('Soru bulunamadı!');
+      return;
+    }
+    
+    console.log('Kaynak soru:', sourceQuestion);
+    
+    // Yeni QR kodu hesapla (5000-5999 arası)
+    const sourceQR = parseInt(sourceQuestion.qr_code);
+    let newQR = 5000 + (sourceQR % 1000);
+    
+    console.log('QR hesaplamasi:', sourceQR, '->', newQR);
+    
+    // QR'ın zaten kullanılıp kullanılmadığını kontrol et
+    while (questions.some(q => q.qr_code === newQR.toString())) {
+      newQR++;
+      if (newQR > 5999) newQR = 5000;
+    }
+    
+    // Yeni soru oluştur
+    const baseType = sourceQuestion.base_type || (sourceQuestion.type === 'duel' || sourceQuestion.type === 'group_duel' || sourceQuestion.type === 'battle'
+      ? 'application'
+      : sourceQuestion.type);
+
+    const newQuestion = {
+      ...sourceQuestion,
+      id: undefined,
+      type: 'group_duel',
+      mode: 'group_duel',
+      base_type: baseType,
+      qr_code: newQR.toString(),
+      created_at: new Date().toISOString()
+    };
+    
+    console.log('Yeni soru gönderiliyor:', newQuestion);
+    
+    const response = await fetch('/api/questions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newQuestion)
+    });
+    
+    console.log('API yanıtı durumu:', response.status, response.ok);
+    
+    if (response.ok) {
+      const result = await response.json();
+      console.log('API başarılı yanıtı:', result);
+      alert(`Kapışma Hep Birlikte olarak kopyalandı! QR: ${newQR}`);
+      
+      // Soruları yenile
+      await loadQuestions();
+      console.log('Sorular yenilendi');
+    } else {
+      const errorText = await response.text();
+      console.error('API hatası:', response.status, errorText);
+      alert(`Kopyalama başarısız oldu! Hata: ${response.status} - ${errorText}`);
+    }
+  } catch (error) {
+    console.error('Kopyalama hatası:', error);
+    alert('Kopyalama başarısız oldu: ' + error.message);
+  }
+}
+
 // Delete Question
 function deleteQuestion(id) {
   deleteQuestionId = id;
@@ -1351,6 +1789,7 @@ function resetForm() {
   document.getElementById('cancel-edit').classList.add('hidden');
   
   currentType = 'multiple';
+  currentMode = 'normal';
   currentTrueFalseAnswer = 'true';
   currentImageData = null;
   
@@ -1366,6 +1805,11 @@ function resetForm() {
   document.querySelectorAll('.type-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.type === 'multiple');
   });
+
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === 'normal');
+  });
+  updateModeHint();
   
   document.querySelectorAll('.tf-option').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.value === 'true');
@@ -1388,6 +1832,25 @@ function resetForm() {
     <input type="text" class="distractor" placeholder="Yanlış seçenek 1">
     <input type="text" class="distractor" placeholder="Yanlış seçenek 2">
   `;
+  
+  // Reset matching pairs
+  const matchingPairsContainer = document.getElementById('matching-pairs');
+  if (matchingPairsContainer) {
+    matchingPairsContainer.innerHTML = '';
+    // Add one empty pair as starting point
+    const emptyPair = document.createElement('div');
+    emptyPair.className = 'matching-pair';
+    emptyPair.innerHTML = `
+      <input type="text" class="match-left" placeholder="Sol öğe">
+      <span class="match-arrow">↔</span>
+      <input type="text" class="match-right" placeholder="Sağ eşi">
+      <button type="button" class="btn-remove-pair">✕</button>
+    `;
+    matchingPairsContainer.appendChild(emptyPair);
+    
+    // Attach event listener
+    emptyPair.querySelector('.btn-remove-pair').addEventListener('click', (e) => e.target.closest('.matching-pair').remove());
+  }
   
   // Reset info section
   document.getElementById('info-enabled').checked = false;
@@ -2078,4 +2541,669 @@ async function loadQRSettings() {
   document.getElementById('qr-bg-color').addEventListener('change', saveQRSettings);
   document.getElementById('qr-logo-size').addEventListener('change', saveQRSettings);
   document.getElementById('qr-size').addEventListener('change', saveQRSettings);
+}
+
+// =========================
+// SES YÖNETİMİ FONKSİYONLARI
+// =========================
+
+// Ses tiplerinin tanımları
+const SOUND_TYPES = {
+  background_music: { name: 'Arka Fon Müziği', description: 'Oyun boyunca çalan müzik', icon: '🎵' },
+  correct_answer: { name: 'Doğru Cevap', description: 'Doğru cevap verildiğinde', icon: '✅' },
+  wrong_answer: { name: 'Yanlış Cevap', description: 'Yanlış cevap verildiğinde', icon: '❌' },
+  timer_tick: { name: 'Süre Tik', description: 'Süre sayarken her saniye', icon: '⏱️' },
+  timer_warning: { name: 'Süre Uyarısı', description: 'Son 10 saniye uyarısı', icon: '⚠️' },
+  timer_end: { name: 'Süre Bitti', description: 'Süre dolduğunda', icon: '⏰' },
+  next_player: { name: 'Sıradaki Oyuncu', description: 'Sıra değişiminde', icon: '👤' },
+  qr_scan: { name: 'QR Tarama', description: 'QR kod tarandığında', icon: '📱' },
+  game_start: { name: 'Oyun Başlangıç', description: 'Oyun başladığında', icon: '🎮' },
+  game_end: { name: 'Oyun Bitiş', description: 'Oyun bittiğinde', icon: '🏁' },
+  victory: { name: 'Zafer', description: 'Oyuncu kazandığında', icon: '🏆' },
+  button_click: { name: 'Buton Tıklama', description: 'Butona tıklandığında', icon: '🔘' },
+  question_appear: { name: 'Soru Belirir', description: 'Yeni soru gösterildiğinde', icon: '❓' }
+};
+
+// Bildirim göster
+function showNotification(message, type = 'info') {
+  // Varolan bildirimi kaldır
+  const existing = document.querySelector('.toast-notification');
+  if (existing) existing.remove();
+  
+  const toast = document.createElement('div');
+  toast.className = `toast-notification toast-${type}`;
+  toast.textContent = message;
+  
+  document.body.appendChild(toast);
+  
+  // Animasyon için küçük gecikme
+  setTimeout(() => toast.classList.add('show'), 10);
+  
+  // 3 saniye sonra kaldır
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
+
+// Tek bir ses kartını güncelle
+async function updateSoundCard(type) {
+  try {
+    const response = await fetch('/api/sound-settings');
+    const soundSettings = await response.json();
+    const setting = soundSettings[type] || { enabled: true, customFile: null, volume: 50 };
+    const info = SOUND_TYPES[type];
+    
+    const oldCard = document.getElementById(`sound-card-${type}`);
+    if (oldCard) {
+      const newCard = createSoundCard(type, info, setting);
+      oldCard.replaceWith(newCard);
+      setupSingleCardListeners(newCard, type);
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
+    }
+  } catch (error) {
+    console.error('Ses kartı güncelleme hatası:', error);
+  }
+}
+
+// Aktif ses ve buton
+let currentAudio = null;
+let currentPlayButton = null;
+
+// Ses kartlarını yükle ve oluştur
+async function loadSounds() {
+  try {
+    const response = await fetch('/api/sound-settings');
+    const soundSettings = await response.json();
+    
+    const soundsGrid = document.getElementById('sounds-grid');
+    if (!soundsGrid) return;
+    
+    soundsGrid.innerHTML = '';
+    
+    for (const [type, info] of Object.entries(SOUND_TYPES)) {
+      const setting = soundSettings[type] || { enabled: true, customFile: null, volume: 50 };
+      const card = createSoundCard(type, info, setting);
+      soundsGrid.appendChild(card);
+    }
+    
+    // Tüm kartlar eklendikten sonra listener'ları kur
+    setupSoundCardListeners();
+    
+    // Lucide iconları oluştur
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
+  } catch (error) {
+    console.error('Sesler yüklenirken hata:', error);
+  }
+}
+
+// Ses kartı oluştur
+function createSoundCard(type, info, setting) {
+  const card = document.createElement('div');
+  card.className = 'sound-card';
+  card.id = `sound-card-${type}`;
+  card.setAttribute('data-sound-type', type);  // ✅ Socket.IO için ekle
+  
+  const isCustom = setting.customFile ? true : false;
+  const statusClass = isCustom ? 'custom' : 'default';
+  const statusText = isCustom ? 'Özel' : 'Varsayılan';
+  const isEnabled = setting.enabled !== false;
+  const volume = setting.volume || 50;
+  
+  card.innerHTML = `
+    <div class="sound-card-header">
+      <div class="sound-title">
+        <h4>${info.name}</h4>
+        <p>${info.description}</p>
+      </div>
+      <label class="sound-toggle">
+        <input type="checkbox" 
+               class="sound-enabled-toggle" 
+               data-type="${type}"
+               ${isEnabled ? 'checked' : ''}>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    
+    <div style="margin: 15px 0; text-align: center;">
+      <span class="sound-status ${statusClass}">
+        <span class="sound-status-dot"></span>
+        ${statusText}
+      </span>
+      ${isCustom ? `<div style="margin-top: 8px; font-size: 12px; color: var(--text-muted);">${setting.customFile.split('/').pop()}</div>` : ''}
+    </div>
+    
+    <div class="sound-volume-control">
+      <label>
+        Ses Seviyesi: <span class="volume-value">${volume}%</span>
+      </label>
+      <input type="range" 
+             class="sound-volume-slider" 
+             data-type="${type}"
+             min="0" 
+             max="100" 
+             value="${volume}">
+    </div>
+    
+    <div class="sound-actions">
+      <input type="file" 
+             class="sound-file-input" 
+             id="file-${type}" 
+             accept="audio/mp3,audio/wav,audio/ogg"
+             data-sound-type="${type}">
+      <button class="btn-upload-sound" data-upload-for="${type}">
+        <i data-lucide="upload"></i>
+        Ses Yükle
+      </button>
+      <button class="btn-play-sound" data-play-for="${type}">
+        <i data-lucide="play"></i>
+        Dinle
+      </button>
+      <button class="btn-reset-sound" 
+              data-reset-for="${type}"
+              ${!isCustom ? 'disabled' : ''}>
+        <i data-lucide="rotate-ccw"></i>
+        Sıfırla
+      </button>
+    </div>
+  `;
+  
+  return card;
+}
+
+// Tek bir kartın listener'larını kur
+function setupSingleCardListeners(card, type) {
+  // Yükleme butonu
+  const uploadBtn = card.querySelector('.btn-upload-sound');
+  if (uploadBtn) {
+    uploadBtn.addEventListener('click', () => {
+      const fileInput = document.getElementById(`file-${type}`);
+      if (fileInput) fileInput.click();
+    });
+  }
+  
+  // Dosya input
+  const fileInput = card.querySelector('.sound-file-input');
+  if (fileInput) {
+    fileInput.addEventListener('change', (e) => {
+      console.log('Dosya seçildi:', e.target.files[0]);
+      handleSoundUpload(type, fileInput);
+    });
+  }
+  
+  // Dinle butonu
+  const playBtn = card.querySelector('.btn-play-sound');
+  if (playBtn) {
+    playBtn.addEventListener('click', () => {
+      playSound(type, playBtn);
+    });
+  }
+  
+  // Sıfırla butonu
+  const resetBtn = card.querySelector('.btn-reset-sound');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      if (!resetBtn.disabled) resetSound(type);
+    });
+  }
+  
+  // Toggle
+  const toggle = card.querySelector('.sound-enabled-toggle');
+  if (toggle) {
+    toggle.addEventListener('change', async (e) => {
+      console.log('Toggle değişti:', type, e.target.checked);
+      const enabled = e.target.checked;
+      await updateSoundSetting(type, { enabled });
+      showNotification(`${SOUND_TYPES[type].name} ${enabled ? 'aktif' : 'pasif'} edildi`, 'success');
+    });
+  }
+  
+  // Volume slider
+  const volumeSlider = card.querySelector('.sound-volume-slider');
+  if (volumeSlider) {
+    volumeSlider.addEventListener('input', (e) => {
+      const volumeValue = card.querySelector('.volume-value');
+      const volume = parseInt(e.target.value);
+      volumeValue.textContent = `${volume}%`;
+      
+      // Eğer ses çalıyorsa anlık olarak volume'u güncelle
+      if (currentAudio && currentPlayButton && currentPlayButton.closest(`#sound-card-${type}`)) {
+        currentAudio.volume = volume / 100;
+        console.log(`${type} ses seviyesi anlık güncellendi:`, volume + '%');
+      }
+    });
+    
+    volumeSlider.addEventListener('change', async (e) => {
+      const volume = parseInt(e.target.value);
+      console.log('Volume değişti:', type, volume);
+      await updateSoundSetting(type, { volume });
+      showNotification(`${SOUND_TYPES[type].name} ses seviyesi ${volume}% olarak ayarlandı`, 'success');
+    });
+  }
+}
+
+// Tüm ses kartlarının event listener'larını kur
+function setupSoundCardListeners() {
+  console.log('Ses kartı event listener\'ları kuruluyor...');
+  
+  document.querySelectorAll('.sound-card').forEach(card => {
+    const type = card.id.replace('sound-card-', '');
+    setupSingleCardListeners(card, type);
+  });
+  
+  // Lucide iconlarını yeniden oluştur
+  if (typeof lucide !== 'undefined') {
+    lucide.createIcons();
+  }
+}
+
+// Ses dosyası yükleme
+async function handleSoundUpload(type, input) {
+  const file = input.files[0];
+    lucide.createIcons();
+  }
+
+
+// Ses dosyası yükleme
+async function handleSoundUpload(type, input) {
+  const file = input.files[0];
+  console.log('Ses yükleme başladı:', type, file);
+  if (!file) return;
+  
+  // Dosya boyutu kontrolü (max 5MB)
+  if (file.size > 5 * 1024 * 1024) {
+    showNotification('Dosya boyutu 5MB\'dan küçük olmalıdır!', 'error');
+    input.value = '';
+    return;
+  }
+  
+  // Dosya tipi kontrolü
+  const validTypes = ['audio/mp3', 'audio/mpeg', 'audio/wav', 'audio/ogg'];
+  if (!validTypes.includes(file.type)) {
+    showNotification('Sadece MP3, WAV veya OGG formatları desteklenir!', 'error');
+    input.value = '';
+    return;
+  }
+  
+  const card = document.getElementById(`sound-card-${type}`);
+  card.classList.add('sound-uploading');
+  
+  try {
+    // Dosyayı base64'e çevir
+    const base64 = await fileToBase64(file);
+    
+    // Sunucuya gönder
+    const response = await fetch('/api/upload-sound', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        soundType: type,
+        soundData: base64,
+        filename: file.name
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      showNotification(`${SOUND_TYPES[type].name} başarıyla yüklendi!`, 'success');
+      // Sadece bu kartı güncelle
+      updateSoundCard(type);
+    } else {
+      throw new Error(result.error || 'Yükleme başarısız');
+    }
+  } catch (error) {
+    console.error('Ses yükleme hatası:', error);
+    showNotification('Ses yüklenirken hata oluştu!', 'error');
+  } finally {
+    card.classList.remove('sound-uploading');
+    input.value = '';
+  }
+}
+
+// Dosyayı base64'e çevir
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// Ses çal (önizleme)
+async function playSound(type, button) {
+  const card = document.getElementById(`sound-card-${type}`);
+  
+  // Aynı butona basıldıysa sesi durdur
+  if (currentAudio && currentPlayButton === button) {
+    try {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+    } catch (e) {}
+    currentAudio = null;
+    currentPlayButton = null;
+    card.classList.remove('sound-playing');
+    
+    // İkonu play yap
+    const icon = button.querySelector('i');
+    if (icon) icon.setAttribute('data-lucide', 'play');
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+    return;
+  }
+  
+  // Önceki sesi durdur
+  if (currentAudio) {
+    try {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+    } catch (e) {}
+    currentAudio = null;
+    
+    // Önceki butonun ikonunu play yap
+    if (currentPlayButton) {
+      const oldIcon = currentPlayButton.querySelector('i');
+      if (oldIcon) oldIcon.setAttribute('data-lucide', 'play');
+    }
+  }
+  
+  // Tüm kartlardan playing sınıfını kaldır
+  document.querySelectorAll('.sound-card').forEach(c => c.classList.remove('sound-playing'));
+  
+  card.classList.add('sound-playing');
+  currentPlayButton = button;
+  
+  // İkonu pause yap
+  const icon = button.querySelector('i');
+  if (icon) icon.setAttribute('data-lucide', 'pause');
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+  
+  try {
+    // Ses ayarlarını al
+    const response = await fetch('/api/sound-settings');
+    const settings = await response.json();
+    const soundSetting = settings[type] || { enabled: true, volume: 50 };
+    
+    let audio;
+    
+    if (soundSetting && soundSetting.customFile) {
+      // Özel ses dosyası varsa onu çal
+      audio = new Audio(soundSetting.customFile);
+      currentAudio = audio;
+    } else {
+      // Varsayılan ses (Web Audio API ile oluşturulmuş)
+      audio = await generateDefaultSound(type);
+    }
+    
+    if (audio) {
+      // Volume ayarını uygula
+      const volume = (soundSetting.volume || 50) / 100;
+      audio.volume = volume;
+      await audio.play();
+      
+      // Ses bitince animasyonu kaldır
+      audio.onended = () => {
+        card.classList.remove('sound-playing');
+        currentAudio = null;
+        currentPlayButton = null;
+        
+        // İkonu play yap
+        if (icon) icon.setAttribute('data-lucide', 'play');
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+      };
+    }
+  } catch (error) {
+    console.error('Ses çalma hatası:', error);
+    showNotification('Ses çalınamadı!', 'error');
+    card.classList.remove('sound-playing');
+    currentAudio = null;
+    currentPlayButton = null;
+    
+    // İkonu play yap
+    if (icon) icon.setAttribute('data-lucide', 'play');
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+  }
+}
+
+// Varsayılan ses oluştur (basit tonlar)
+async function generateDefaultSound(type) {
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  const oscillator = audioContext.createOscillator();
+  const gainNode = audioContext.createGain();
+  
+  oscillator.connect(gainNode);
+  gainNode.connect(audioContext.destination);
+  
+  // Ses tipine göre farklı tonlar
+  const soundConfigs = {
+    correct_answer: { freq: 523.25, duration: 0.3 },
+    wrong_answer: { freq: 196.00, duration: 0.4 },
+    timer_tick: { freq: 440.00, duration: 0.1 },
+    timer_warning: { freq: 587.33, duration: 0.2 },
+    timer_end: { freq: 261.63, duration: 0.5 },
+    next_player: { freq: 659.25, duration: 0.3 },
+    qr_scan: { freq: 880.00, duration: 0.2 },
+    game_start: { freq: 523.25, duration: 0.4 },
+    game_end: { freq: 392.00, duration: 0.5 },
+    victory: { freq: 783.99, duration: 0.6 },
+    button_click: { freq: 440.00, duration: 0.1 },
+    question_appear: { freq: 523.25, duration: 0.2 }
+  };
+  
+  const config = soundConfigs[type] || { freq: 440, duration: 0.3 };
+  
+  oscillator.frequency.value = config.freq;
+  oscillator.type = 'sine';
+  
+  gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+  gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + config.duration);
+  
+  oscillator.start(audioContext.currentTime);
+  oscillator.stop(audioContext.currentTime + config.duration);
+  
+  // Audio nesnesi döndür (uyumluluk için)
+  return new Promise((resolve) => {
+    const audio = { play: () => Promise.resolve(), onended: null };
+    setTimeout(() => {
+      if (audio.onended) audio.onended();
+      resolve(audio);
+    }, config.duration * 1000);
+    resolve(audio);
+  });
+}
+
+// Sesi sıfırla (özel dosyayı kaldır)
+async function resetSound(type) {
+  if (!confirm(`${SOUND_TYPES[type].name} sesini varsayılana döndürmek istediğinize emin misiniz?`)) {
+    return;
+  }
+  
+  try {
+    const response = await fetch('/api/reset-sound', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ soundType: type })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      showNotification(`${SOUND_TYPES[type].name} varsayılana döndürüldü!`, 'success');
+      updateSoundCard(type); // Sadece bu kartı güncelle
+    } else {
+      throw new Error(result.error || 'Sıfırlama başarısız');
+    }
+  } catch (error) {
+    console.error('Ses sıfırlama hatası:', error);
+    showNotification('Ses sıfırlanırken hata oluştu!', 'error');
+  }
+}
+
+// Ses ayarını güncelle (enabled, volume vb.)
+async function updateSoundSetting(type, updates) {
+  try {
+    const response = await fetch('/api/update-sound-setting', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ soundType: type, ...updates })
+    });
+    
+    const result = await response.json();
+    
+    if (!result.success) {
+      throw new Error(result.error || 'Güncelleme başarısız');
+    }
+  } catch (error) {
+    console.error('Ses ayarı güncelleme hatası:', error);
+    showNotification('Ayar güncellenirken hata oluştu!', 'error');
+  }
+}
+
+// Sayfa yüklendiğinde sesleri yükle
+document.addEventListener('DOMContentLoaded', () => {
+  // Ses sekmesi açıldığında sesleri yükle
+  const soundsNavItem = document.querySelector('[data-section="sounds"]');
+  if (soundsNavItem) {
+    soundsNavItem.addEventListener('click', () => {
+      loadSounds();
+    });
+  }
+  
+  // Tüm butonlara click ses efekti ekle (admin paneli için)
+  document.addEventListener('click', (e) => {
+    const button = e.target.closest('button');
+    if (button && !button.disabled) {
+      // Ses yönetimi play butonları için ses çalma (sonsuz döngü önleme)
+      if (!button.classList.contains('btn-play-sound')) {
+        // Admin panelinde ses efektleri için basit bir ses çalabiliriz
+        // veya soundManager varsa kullanabiliriz
+        try {
+          // Kısa bir click sesi
+          const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          const oscillator = audioContext.createOscillator();
+          const gainNode = audioContext.createGain();
+          
+          oscillator.connect(gainNode);
+          gainNode.connect(audioContext.destination);
+          
+          oscillator.frequency.value = 800;
+          oscillator.type = 'sine';
+          gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+          
+          oscillator.start(audioContext.currentTime);
+          oscillator.stop(audioContext.currentTime + 0.1);
+        } catch (e) {
+          // Ses çalma hatası, sessizce devam et
+        }
+      }
+    }
+  });
+});
+
+// Handle Password Change
+async function handlePasswordChange(e) {
+  e.preventDefault();
+  
+  const currentPassword = document.getElementById('current-password').value;
+  const newPassword = document.getElementById('new-password').value;
+  const confirmPassword = document.getElementById('confirm-password').value;
+  const errorDiv = document.getElementById('password-error');
+  const successDiv = document.getElementById('password-success');
+  const submitBtn = document.getElementById('change-password-btn');
+  
+  // Clear messages
+  errorDiv.style.display = 'none';
+  successDiv.style.display = 'none';
+  
+  // Validation
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    errorDiv.textContent = '❌ Tüm alanlar gereklidir';
+    errorDiv.style.display = 'block';
+    return;
+  }
+  
+  if (newPassword.length < 6) {
+    errorDiv.textContent = '❌ Yeni şifre en az 6 karakter olmalıdır';
+    errorDiv.style.display = 'block';
+    return;
+  }
+  
+  if (newPassword !== confirmPassword) {
+    errorDiv.textContent = '❌ Yeni şifreler uyuşmuyor';
+    errorDiv.style.display = 'block';
+    return;
+  }
+  
+  try {
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Gönderiliyor...';
+    
+    const response = await fetch('/api/admin/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        currentPassword,
+        newPassword
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (response.ok && data.success) {
+      successDiv.textContent = '✅ Şifre başarıyla değiştirildi! Yeni şifrenizle giriş yapabilirsiniz.';
+      successDiv.style.display = 'block';
+      
+      // Clear form
+      document.getElementById('password-form').reset();
+      
+      // Save the new password if remember was checked in login
+      if (rememberCheckbox && rememberCheckbox.checked) {
+        localStorage.setItem(PASSWORD_KEY, newPassword);
+      }
+      
+      // Redirect to login after 2 seconds
+      setTimeout(() => {
+        handleLogout();
+      }, 2000);
+    } else {
+      errorDiv.textContent = `❌ ${data.error || 'Şifre değiştirme başarısız'}`;
+      errorDiv.style.display = 'block';
+    }
+  } catch (error) {
+    console.error('Şifre değiştirme hatası:', error);
+    errorDiv.textContent = '❌ Sunucu hatası: ' + error.message;
+    errorDiv.style.display = 'block';
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Şifre Değiştir';
+  }
+}
+
+// ✅ Socket.IO - Oyun ekranından ses değişikliğini dinle
+if (typeof socket !== 'undefined') {
+  socket.on('sound-setting-updated', (data) => {
+    const { soundType, volume } = data;
+    console.log(`🔊 Socket.IO: Oyun ekranından ses değişikliği alındı: ${soundType} = ${volume}%`);
+    
+    // Ses kartını bul ve güncelle
+    const soundCard = document.querySelector(`[data-sound-type="${soundType}"]`);
+    if (soundCard) {
+      const slider = soundCard.querySelector('input[type="range"]');
+      const volumeDisplay = soundCard.querySelector('.volume-value');
+      
+      if (slider) {
+        slider.value = volume;
+        console.log(`✅ Slider güncellendi: ${soundType}`);
+      }
+      if (volumeDisplay) {
+        volumeDisplay.textContent = `${volume}%`;
+        console.log(`✅ Yüzde güncellendi: ${volume}%`);
+      }
+    }
+  });
 }

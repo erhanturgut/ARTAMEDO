@@ -1,15 +1,18 @@
 <!DOCTYPE html>
 <html lang="tr">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <title>ARTAMEDO - Artırılmış Gerçeklik Eğitim Oyunu</title>
-  <link rel="stylesheet" href="styles.css?v=20251130q">
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="styles.css?v=20">
+  <link rel="stylesheet" href="/libs/fonts/fonts.css">
+  <script src="/libs/lucide.min.js"></script>
 </head>
+
 <body>
   <!-- Tam Ekran Butonu -->
   <button id="fullscreen-btn" class="fullscreen-btn" title="Tam Ekran">
@@ -24,7 +27,7 @@
         <h1 class="game-title">ARTAMEDO</h1>
         <p class="game-subtitle">Artırılmış Gerçeklik Eğitim Oyunu</p>
       </div>
-      
+
       <div class="menu-card">
         <h2 class="section-title">Oyuncu Sayısı Seç</h2>
         <div class="player-selector">
@@ -35,11 +38,11 @@
           <button class="player-btn" data-count="5">5</button>
           <button class="player-btn" data-count="6">6</button>
         </div>
-        
+
         <div id="player-names" class="player-names hidden">
           <!-- Dinamik olarak eklenecek -->
         </div>
-        
+
         <div id="turn-order-display" class="turn-order-display hidden">
           <h3 class="turn-order-title">Oyun Sırası</h3>
           <div id="turn-order-list" class="turn-order-list"></div>
@@ -48,17 +51,17 @@
             Oyuna Başla
           </button>
         </div>
-        
+
         <button id="start-game-btn" class="btn-primary hidden">
           <i data-lucide="shuffle" class="btn-icon-svg"></i>
           Sıralamayı Belirle
         </button>
       </div>
-      
+
       <button id="open-rules-btn" class="btn-secondary" style="margin-top: 14px;">
         <i data-lucide="book" class="btn-icon-svg"></i> Kurallar
       </button>
-      
+
       <a href="/admin" class="admin-link">
         <i data-lucide="settings" class="inline-icon"></i> Yönetici Paneli
       </a>
@@ -71,7 +74,7 @@
           OYUNCU 1
         </div>
       </div>
-      
+
       <!-- QR Scanner -->
       <div class="qr-scanner-container" id="qr-container">
         <div class="scanner-frame">
@@ -82,7 +85,7 @@
           Manuel QR Girişi
         </button>
       </div>
-      
+
       <!-- Soru Kartı with Progress Border -->
       <div id="question-wrapper" class="question-wrapper hidden">
         <div class="progress-border" id="score-display">
@@ -92,7 +95,7 @@
           <!-- Dinamik soru içeriği -->
         </div>
       </div>
-      
+
       <!-- Sonuç Göstergesi -->
       <div id="result-indicator" class="result-indicator hidden">
         <!-- Doğru/Yanlış göstergesi -->
@@ -117,7 +120,8 @@
     <div id="manual-qr-modal" class="modal hidden">
       <div class="modal-content">
         <h3>QR Kodu Girin</h3>
-        <input type="text" id="manual-qr-input" placeholder="Örn: 1, 2, 3..." autocomplete="off" data-lpignore="true" data-form-type="other">
+        <input type="text" id="manual-qr-input" placeholder="Örn: 1, 2, 3..." autocomplete="off" data-lpignore="true"
+          data-form-type="other">
         <div class="modal-buttons">
           <button id="submit-qr-btn" class="btn-primary">Tamam</button>
           <button id="cancel-qr-btn" class="btn-secondary">İptal</button>
@@ -138,7 +142,7 @@
         </div>
       </div>
     </div>
-    
+
     <!-- Soru Tipi Seçim Modalı - Slot Makinesi -->
     <div id="type-selection-modal" class="modal hidden">
       <div class="modal-content type-selection-content">
@@ -147,7 +151,7 @@
         </div>
         <h3>Soru Tipi Seçimi</h3>
         <p>Butona basarak rastgele soru tipi belirleyin</p>
-        
+
         <div class="slot-machine">
           <div class="slot-window" id="slot-window">
             <div class="slot-reel" id="slot-reel">
@@ -155,21 +159,21 @@
             </div>
           </div>
         </div>
-        
+
         <div class="type-selection-buttons">
           <button id="spin-slot-btn" class="btn-primary spin-btn">
             <i data-lucide="zap" class="btn-icon-svg"></i>
             Çevir!
           </button>
         </div>
-        
+
         <div id="confirm-type-section" class="hidden">
           <button id="confirm-type-btn" class="btn-primary">
             <i data-lucide="qr-code" class="btn-icon-svg"></i>
             QR Kod Tara
           </button>
         </div>
-        
+
         <button class="btn-secondary close-modal-btn" onclick="hideTypeSelectionModal()">
           İptal
         </button>
@@ -184,7 +188,8 @@
           <button id="rules-x-btn" class="rules-close-x" aria-label="Kapat">&times;</button>
         </div>
         <div class="rules-body">
-          <p class="rules-intro">ARTAMEDO; dijital uygulama ile fiziksel tahtayı entegre oynatan, adım ilerlemeli bir bilgi ve uygulama oyunudur.</p>
+          <p class="rules-intro">ARTAMEDO; dijital uygulama ile fiziksel tahtayı entegre oynatan, adım ilerlemeli bir
+            bilgi ve uygulama oyunudur.</p>
 
           <h4>Özet</h4>
           <ul>
@@ -202,8 +207,10 @@
           <h4>Tur Akışı</h4>
           <ol>
             <li>Aktif oyuncu QR kodu okutarak soruyu açar.</li>
-            <li>Süreli sorularda sayaç başlar; Uygulama tipi sorularda süre otomatik başlamaz, “Süreyi Başlat” ile başlatılır.</li>
-            <li>Oyuncu cevaplar/ görevi tamamlar; doğruluk uygulamada gösterilir. Soruya göre kaç adım ilerleyeceği belirlenir.</li>
+            <li>Süreli sorularda sayaç başlar; Uygulama tipi sorularda süre otomatik başlamaz, “Süreyi Başlat” ile
+              başlatılır.</li>
+            <li>Oyuncu cevaplar/ görevi tamamlar; doğruluk uygulamada gösterilir. Soruya göre kaç adım ilerleyeceği
+              belirlenir.</li>
             <li>“Sonraki Oyuncu” ile sıra devam eder.</li>
           </ol>
 
@@ -243,8 +250,10 @@
     </div>
   </div>
 
-  <script src="https://unpkg.com/html5-qrcode"></script>
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="game.js"></script>
+  <script src="/libs/html5-qrcode.min.js"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="/js/sound-manager.js?v=29"></script>
+  <script src="/game.js?v=37"></script>
 </body>
+
 </html>
